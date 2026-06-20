@@ -1,5 +1,9 @@
 # Driftpane
 
+### 📖 **[Read the documentation →](#usage)**
+
+**[Usage](#usage) · [Options & API](#options-driftpaneoptions) · [Demo](#demo) · [Preset model](#preset-model)** &nbsp;|&nbsp; **[📦 npm](https://www.npmjs.com/package/driftpane)**
+
 A **non-invasive** layer on top of [Tweakpane](https://tweakpane.github.io/) v4
 that adds six features without modifying the core:
 
