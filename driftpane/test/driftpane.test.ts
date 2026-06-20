@@ -2,7 +2,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
 import {createDriftpane, Driftpane} from '../src/driftpane.js';
 import {SerializedState} from '../src/types.js';
-import {FakePane} from './helpers/fake-pane.js';
+import {FakeFolder, FakePane} from './helpers/fake-pane.js';
 
 function liveState(): SerializedState {
 	return {
@@ -140,5 +140,33 @@ describe('Driftpane facade', () => {
 		drift.applyPreset(p.id);
 		expect(refreshSpy).toHaveBeenCalled();
 		drift.dispose();
+	});
+
+	it('exportAllJSON produces a full backup envelope of the namespace', () => {
+		const drift = createDriftpane(pane, {storageNamespace: 'backup'});
+		drift.savePresetAs('P1');
+		localStorage.setItem('driftpane:backup:theme', JSON.stringify('dark'));
+		localStorage.setItem('driftpane:backup:width', JSON.stringify(320));
+		const parsed = JSON.parse(drift.exportAllJSON());
+		expect(parsed.format).toBe('driftpane-backup');
+		expect(parsed.version).toBe(1);
+		expect(parsed.namespace).toBe('backup');
+		expect(parsed.data.presets).toBeDefined();
+		expect(parsed.data.theme).toBe('dark');
+		expect(parsed.data.width).toBe(320);
+		drift.dispose();
+	});
+
+	it('showExportAll adds the "Export all" button to the preset menu', () => {
+		const drift = createDriftpane(pane, {showExportAll: true});
+		const folder = pane.children[0] as unknown as FakeFolder;
+		expect(folder.button('Export all')).toBeDefined();
+		// Without the flag the button is absent.
+		const pane2 = new FakePane({initialState: liveState()});
+		const drift2 = createDriftpane(pane2);
+		const folder2 = pane2.children[0] as unknown as FakeFolder;
+		expect(folder2.button('Export all')).toBeUndefined();
+		drift.dispose();
+		drift2.dispose();
 	});
 });

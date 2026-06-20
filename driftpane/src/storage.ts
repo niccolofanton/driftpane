@@ -40,6 +40,11 @@ export class DriftpaneStorage {
 		return `driftpane:${this.namespace}:${suffix}`;
 	}
 
+	/** The storage namespace (used e.g. to name full-backup export files). */
+	public getNamespace(): string {
+		return this.namespace;
+	}
+
 	/**
 	 * Reads and deserializes a JSON value. Returns `fallback` if the key does not
 	 * exist, if the storage is unavailable, or if the JSON is malformed.

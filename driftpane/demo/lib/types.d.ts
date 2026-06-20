@@ -93,6 +93,14 @@ export interface DriftpaneOptions {
      * Default: false (hidden, "decided programmatically").
      */
     showDeletePreset?: boolean;
+    /**
+     * Shows the "Export all" button inside the preset folder: it downloads a full
+     * backup of the namespace's persisted state (panel values/folds, position,
+     * width, max-height, theme AND every preset) as a single JSON file. The plain
+     * "Export" button instead exports only the selected preset, named after it.
+     * Default: false (hidden).
+     */
+    showExportAll?: boolean;
     /** Keeps the panel within the viewport edges. Default: true. */
     clampToViewport?: boolean;
     /**

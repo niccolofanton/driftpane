@@ -14,6 +14,8 @@ export declare class DriftpaneStorage {
     constructor(namespace: string);
     /** Builds the full namespaced key for a given suffix. */
     keyFor(suffix: string): string;
+    /** The storage namespace (used e.g. to name full-backup export files). */
+    getNamespace(): string;
     /**
      * Reads and deserializes a JSON value. Returns `fallback` if the key does not
      * exist, if the storage is unavailable, or if the JSON is malformed.

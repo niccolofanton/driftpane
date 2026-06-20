@@ -39,6 +39,12 @@ export declare class Driftpane {
      *   (`calc(100dvh - 48px)`, 24px safe zone top/bottom) and forget the override.
      */
     setMaxHeight(value: number | string | null): void;
+    /**
+     * Serializes a FULL backup of the namespace's persisted state into a versioned
+     * JSON envelope: panel values/folds (`state`), drag `position`, `width`,
+     * `maxHeight`, `theme` and the whole `presets` store. Missing keys are omitted.
+     */
+    exportAllJSON(): string;
     /** Saves the current state as a new preset with the given name. */
     savePresetAs(name: string): void;
     /** Applies a preset by id and updates the UI. */

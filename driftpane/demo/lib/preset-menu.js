@@ -123,6 +123,12 @@ export class PresetMenu {
             resetBtn.on('click', () => this.opts.onResetPosition?.());
             this.markButton(resetBtn, 'dp-btn-reset');
         }
+        // Optional "Export all": full backup of the namespace's persisted state.
+        if (this.opts.onExportAll) {
+            const exportAllBtn = folder.addButton({ title: 'Export all' });
+            exportAllBtn.on('click', () => this.onExportAll());
+            this.markButton(exportAllBtn, 'dp-btn-export');
+        }
         // Hidden file input for file-based import.
         this.fileInput = this.createFileInput();
         this.updateButtonStates();
@@ -286,10 +292,38 @@ export class PresetMenu {
         this.refreshList();
         this.notify(`Preset renamed to "${current.name}".`);
     }
-    /** "Export JSON": downloads the entire collection as a .json file. */
+    /** "Export": downloads the SELECTED preset as a .json file named after it. */
     onExport() {
-        const json = this.presets.exportJSON();
-        this.downloadFile('driftpane-presets.json', json);
+        const id = this.presets.activeId();
+        const preset = id ? this.presets.get(id) : undefined;
+        if (!id || !preset) {
+            this.notify('No preset selected to export.');
+            return;
+        }
+        const json = this.presets.exportPresetJSON(id);
+        this.downloadFile(`${this.safeFilename(preset.name)}.json`, json);
+    }
+    /** "Export all": downloads a full backup of the namespace's persisted state. */
+    onExportAll() {
+        const result = this.opts.onExportAll?.();
+        if (!result) {
+            return;
+        }
+        this.downloadFile(result.filename, result.content);
+    }
+    /**
+     * Turns a preset name into a safe file name: drops path separators and chars
+     * that browsers/OSes reject, collapses whitespace, strips leading dots. Falls
+     * back to "preset" when nothing usable remains.
+     */
+    safeFilename(name) {
+        const cleaned = name
+            .trim()
+            .replace(/[\\/:*?"<>|]/g, '-')
+            .replace(/\s+/g, ' ')
+            .replace(/^\.+/, '')
+            .trim();
+        return cleaned.length > 0 ? cleaned : 'preset';
     }
     /** "Import JSON": opens the file picker (with a text-prompt fallback). */
     onImport() {

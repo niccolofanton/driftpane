@@ -16,6 +16,34 @@ function liveState(): SerializedState {
 	};
 }
 
+/**
+ * Intercepts the <a download> created by downloadFile and stubs the URL
+ * object-URL helpers (absent in jsdom). Returns the captured anchors. The spies
+ * are cleared by vi.restoreAllMocks() in afterEach.
+ */
+function captureDownloads(): HTMLAnchorElement[] {
+	const created: HTMLAnchorElement[] = [];
+	const realCreate = document.createElement.bind(document);
+	vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
+		const el = realCreate(tag);
+		if (String(tag).toLowerCase() === 'a') {
+			const anchor = el as HTMLAnchorElement;
+			// jsdom does not implement navigation; neutralize the click so the
+			// download attempt does not log a "not implemented" warning.
+			anchor.click = (): void => undefined;
+			created.push(anchor);
+		}
+		return el;
+	}) as typeof document.createElement);
+	const urlObj = URL as unknown as {
+		createObjectURL: unknown;
+		revokeObjectURL: unknown;
+	};
+	urlObj.createObjectURL = (): string => 'blob:test';
+	urlObj.revokeObjectURL = (): void => undefined;
+	return created;
+}
+
 describe('PresetMenu', () => {
 	let pane: FakePane;
 	let presets: PresetController;
@@ -185,5 +213,53 @@ describe('PresetMenu', () => {
 		menu.dispose();
 		expect(document.querySelector('input[type="file"]')).toBeNull();
 		expect(folder.disposed).toBe(true);
+	});
+
+	it('"Export" downloads the SELECTED preset, named after it', () => {
+		const folder = menu.mount() as unknown as FakeFolder;
+		const p = presets.save('My Cool Preset');
+		menu.refreshList();
+		folder.list()?.select(p.id);
+		const anchors = captureDownloads();
+		folder.button('Export')?.click();
+		expect(anchors).toHaveLength(1);
+		expect(anchors[0].download).toBe('My Cool Preset.json');
+	});
+
+	it('"Export" sanitizes illegal filename chars from the preset name', () => {
+		const folder = menu.mount() as unknown as FakeFolder;
+		const p = presets.save('a/b:c*d');
+		menu.refreshList();
+		folder.list()?.select(p.id);
+		const anchors = captureDownloads();
+		folder.button('Export')?.click();
+		expect(anchors[0].download).toBe('a-b-c-d.json');
+	});
+
+	it('"Export all" appears only with onExportAll and triggers the download', () => {
+		// Default menu: no onExportAll -> no "Export all" button.
+		const folder = menu.mount() as unknown as FakeFolder;
+		expect(folder.button('Export all')).toBeUndefined();
+		menu.dispose();
+
+		const onExportAll = vi.fn(() => ({
+			filename: 'driftpane-x-backup.json',
+			content: '{"format":"driftpane-backup"}',
+		}));
+		const storage = new DriftpaneStorage('menu-exportall');
+		const presets2 = new PresetController(pane, storage, {
+			managerChildIndex: 0,
+		});
+		const menu2 = new PresetMenu(pane, presets2, {
+			folderTitle: 'P',
+			onAfterApply: vi.fn(),
+			onExportAll,
+		});
+		const folder2 = menu2.mount() as unknown as FakeFolder;
+		const anchors = captureDownloads();
+		folder2.button('Export all')?.click();
+		expect(onExportAll).toHaveBeenCalled();
+		expect(anchors[0].download).toBe('driftpane-x-backup.json');
+		menu2.dispose();
 	});
 });

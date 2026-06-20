@@ -108,6 +108,7 @@ const panel = createDriftpane(pane, {
   // showThemeControl: true,    // show the "Theme" control in the preset folder
   // showResetPosition: true,   // show "Reset position"
   // showDeletePreset: true,    // show "Delete preset" (custom presets only)
+  // showExportAll: true,       // show "Export all" (full namespace backup)
 });
 
 // Programmatic API:
@@ -142,6 +143,7 @@ All optional; defaults are applied by the `Driftpane` facade.
 | `showThemeControl` | `boolean` | `false` | Show the "Theme" control in the preset folder. |
 | `showResetPosition` | `boolean` | `false` | Show the "Reset position" button. |
 | `showDeletePreset` | `boolean` | `false` | Show "Delete preset" (custom presets only). |
+| `showExportAll` | `boolean` | `false` | Show "Export all": downloads a full namespace backup (state + position + size + theme + every preset). |
 | `width` | `number` | `280` | Initial width in px (clamped to [200, 600]). |
 | `resizableWidth` | `boolean` | `true` | Width resize handle (right edge). |
 | `resizableHeight` | `boolean` | `true` | Height resize handle (bottom edge); the corner requires both. |
@@ -274,8 +276,10 @@ interface DriftpanePresetStore {
 }
 ```
 
-The JSON file exported by the **Export JSON** button is the entire collection,
-in a versioned envelope:
+The **Export** button downloads the **selected preset** as a single JSON file
+named after it (e.g. `My Preset.json`). The optional **Export all** button
+(`showExportAll`) downloads a full namespace backup. The whole preset collection
+is also available programmatically via `exportJSON()`, in a versioned envelope:
 
 ```json
 {
@@ -313,9 +317,10 @@ is computed at runtime via a lazy resolver passed in by the controllers (see
 - **Drag position independent of presets**: applying a preset only calls
   `importState()` and does not move the panel. The position lives in its own
   separate key. The preset folder offers an optional "Reset position" button.
-- **Export JSON = the entire collection** (not just the selected one), to avoid
-  silently losing data. `exportPresetJSON(id)` remains available as a
-  programmatic API.
+- **Export = the selected preset** (the file is named after it); the optional
+  **Export all** button downloads a full namespace backup (`exportAllJSON()`).
+  The whole preset collection stays available via the `exportJSON()` /
+  `exportPresetJSON(id)` programmatic APIs.
 - **Debounce only, no `ev.last` filter**: the trailing-edge debounce already
   collapses an entire gesture into a single write by reading `exportState()` at
   flush time.

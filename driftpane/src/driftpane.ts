@@ -65,6 +65,7 @@ const DEFAULTS = {
 	showThemeControl: false,
 	showResetPosition: false,
 	showDeletePreset: false,
+	showExportAll: false,
 	clampToViewport: true,
 	// 24px safe zone from every edge (consistent with the default height cap).
 	defaultPosition: {x: 24, y: 24} as DriftpanePosition,
@@ -146,6 +147,12 @@ export class Driftpane {
 					: undefined,
 				themeController: options.showThemeControl ? this.theme : undefined,
 				showDeletePreset: options.showDeletePreset,
+				onExportAll: options.showExportAll
+					? () => ({
+							filename: `driftpane-${options.storageNamespace}-backup.json`,
+							content: this.exportAllJSON(),
+						})
+					: undefined,
 			});
 			this.presetMenu.mount();
 			// Ensures a "Default" preset (non-deletable baseline) by capturing the
@@ -218,6 +225,37 @@ export class Driftpane {
 		const css = typeof value === 'number' ? `${value}vh` : value;
 		applyMaxHeight(this.maxHeightHost, css);
 		this.storage.writeJSON(MAXHEIGHT_KEY, css);
+	}
+
+	/**
+	 * Serializes a FULL backup of the namespace's persisted state into a versioned
+	 * JSON envelope: panel values/folds (`state`), drag `position`, `width`,
+	 * `maxHeight`, `theme` and the whole `presets` store. Missing keys are omitted.
+	 */
+	public exportAllJSON(): string {
+		const suffixes = [
+			'state',
+			'position',
+			'width',
+			'maxHeight',
+			'theme',
+			'presets',
+		];
+		const data: Record<string, unknown> = {};
+		for (const suffix of suffixes) {
+			const value = this.storage.readJSON<unknown>(suffix, null);
+			if (value !== null) {
+				data[suffix] = value;
+			}
+		}
+		const envelope = {
+			format: 'driftpane-backup',
+			version: 1 as const,
+			namespace: this.storage.getNamespace(),
+			exportedAt: new Date().toISOString(),
+			data,
+		};
+		return JSON.stringify(envelope, null, 2);
 	}
 
 	/** Saves the current state as a new preset with the given name. */

@@ -51,6 +51,14 @@ export interface PresetMenuOptions {
     themeController?: ThemeControllerLike;
     /** Whether to show the "Delete preset" button (with confirmation). Default: false. */
     showDeletePreset?: boolean;
+    /**
+     * Optional callback for the "Export all" button: returns the file name and the
+     * JSON content of a full namespace backup. When absent, the button is hidden.
+     */
+    onExportAll?: () => {
+        filename: string;
+        content: string;
+    };
 }
 export declare class PresetMenu {
     private readonly pane;
@@ -107,8 +115,16 @@ export declare class PresetMenu {
     private onDelete;
     /** "Rename preset": renames the currently selected preset. */
     private onRename;
-    /** "Export JSON": downloads the entire collection as a .json file. */
+    /** "Export": downloads the SELECTED preset as a .json file named after it. */
     private onExport;
+    /** "Export all": downloads a full backup of the namespace's persisted state. */
+    private onExportAll;
+    /**
+     * Turns a preset name into a safe file name: drops path separators and chars
+     * that browsers/OSes reject, collapses whitespace, strips leading dots. Falls
+     * back to "preset" when nothing usable remains.
+     */
+    private safeFilename;
     /** "Import JSON": opens the file picker (with a text-prompt fallback). */
     private onImport;
     private buildOptions;
