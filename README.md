@@ -1,92 +1,107 @@
-# Tweakpane
-![CI](https://github.com/cocopon/tweakpane/workflows/CI/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/cocopon/tweakpane/badge.svg)](https://coveralls.io/github/cocopon/tweakpane)
-[![npm version](https://badge.fury.io/js/tweakpane.svg)](https://badge.fury.io/js/tweakpane)
+# Driftpane
 
-![cover](https://user-images.githubusercontent.com/602961/146529897-38829c6f-56df-46f6-81fe-d65fb2027eaa.png)
+**Driftpane** is a small, **non-invasive** layer on top of
+[Tweakpane](https://tweakpane.github.io/) v4 that turns a debug panel into a
+real, persistent control surface — without touching the Tweakpane core.
 
-Tweakpane is a compact pane library for fine-tuning parameters and monitoring
-value changes, inspired by [dat.GUI][].
+One call on an existing `Pane` adds four things:
 
-- Clean and simple design
-- Dependency-free
-- Extensible
+1. **State persistence** — control values _and_ the `expanded` state of the pane
+   are saved to `localStorage` and restored on reload.
+2. **Draggable, resizable, persistent panel** — the pane is wrapped in a
+   `position: fixed` container you can drag by its title bar (mouse + touch),
+   clamped to the viewport. A right-edge handle resizes the width. Position and
+   width persist.
+3. **Persistent open/closed folders (nested too)** — the `expanded` state of the
+   pane and of _every_ folder/tab, at any depth, survives a reload.
+4. **Presets** — save / apply / list / rename / export / import named snapshots
+   of the state, via a dedicated folder **auto-injected as the last entry** of
+   the pane.
 
-(dat.GUI user? The [migration guide](https://tweakpane.github.io/docs/migration/#datgui) can be helpful)
+Driftpane uses **only Tweakpane's public API** (`exportState` / `importState`,
+`element`, `addFolder` / `addButton` / `addBlade`, `on('change')` /
+`on('fold')`). No core file is modified — so this fork stays cleanly mergeable
+with upstream Tweakpane (see [below](#updating-tweakpane)).
 
+> 📦 The package and its full documentation live in **[`driftpane/`](./driftpane)**.
 
-## Installation
-Refer to the [Getting Started](https://tweakpane.github.io/docs/getting-started/) section for concrete steps. Remember to install `@tweakpane/core` if you are developing with TypeScript.
+## Install
 
-
-## Features
-See the [official page][documents] for details.
-
-
-### [Bindings](https://tweakpane.github.io/docs/input-bindings/)
-Number, String, Boolean, Color, Point 2D/3D/4D
-
-![Bindings](https://user-images.githubusercontent.com/602961/184479032-38f50be3-e235-4914-85c0-dce316b33ed2.png)
-
-
-### [Readonly bindings](https://tweakpane.github.io/docs/monitor-bindings/)
-Number, String, Boolean
-
-![Readonly bindings](https://user-images.githubusercontent.com/602961/184479060-44fda993-9f40-4ef1-b363-18e9f9deff7f.png)
-
-
-### [UI components](https://tweakpane.github.io/docs/ui-components/)
-Folder, Tab, Button, Separator
-
-![UI components](https://user-images.githubusercontent.com/602961/184479079-84ee5436-b5f6-4c35-92eb-94cc8709ff12.png)
-
-
-### [Theming](https://tweakpane.github.io/docs/theming/)
-![Theming](https://user-images.githubusercontent.com/602961/115102105-e6676500-9f83-11eb-8a74-ae4f76122000.png)
-
-
-### [Plugins](https://tweakpane.github.io/docs/plugins/)
-![Plugins](https://user-images.githubusercontent.com/602961/184479086-cc8c72c2-c958-4e4e-8ae4-2690f721c544.png)
-
-
-### [Misc](https://tweakpane.github.io/docs/misc/)
-- Mobile support
-- TypeScript type definitions
-- JSON import / export
-
-
-## Development
-
-
-### CommonJS and ES modules
-From version 4, Tweakpane has been migrated to ES modules. If you are looking for a CommonJS version of the package, use version 3.x.
-
-
-### Build your own Tweakpane
-
-```
-$ npm ci
-$ npm run setup
-$ cd packages/tweakpane
-$ npm start
+```bash
+npm install driftpane tweakpane
 ```
 
-The above commands start a web server for the document, build source files, and
-watch for changes. Open `http://localhost:8080/` to browse the document.
+`tweakpane` is a **peer dependency** (Tweakpane v4, `tweakpane@^4.0.0`): install
+it alongside Driftpane.
 
+## Quick start
 
-## Other resources
+```ts
+import {Pane} from 'tweakpane';
+import {createDriftpane} from 'driftpane';
 
+const params = {speed: 0.5, color: '#1e1e1e'};
 
-### [Design Kit](https://www.figma.com/community/file/1324202557355874089)
-Includes the basics, styles and components for Tweakpane, providing a practical resource for creating your own plugin.
+const pane = new Pane({title: 'Parameters'});
+pane.addBinding(params, 'speed', {min: 0, max: 1});
+pane.addBinding(params, 'color');
 
-[![image](https://github.com/cocopon/tweakpane/assets/602961/78cfd81f-d950-48e3-a0f1-6b6a14caaca4)](https://www.figma.com/community/file/1324202557355874089)
+// Build the pane first, then enable all four features in one call.
+const panel = createDriftpane(pane, {
+  storageNamespace: 'demo',
+  draggable: true,
+  presetsEnabled: true, // injects the "Preset" folder as the LAST entry
+  clampToViewport: true,
+});
 
+// Programmatic API:
+panel.savePresetAs('Dark');
+panel.applyPreset('<id>');
+panel.resetState(); // clears persisted state (not presets nor position)
+```
+
+> ℹ️ `importState()` does **not** re-fire your binding `change` handlers. If your
+> app applies side effects in those handlers, call your own `applyAll()` (and
+> `pane.refresh()`) right after `createDriftpane` so the restored values take
+> effect on first paint.
+
+## Optional theme
+
+An "Apple-minimal / frosted glass" skin ships with the package — dark by default,
+light via `data-theme="light"`:
+
+```ts
+import 'driftpane/theme.css';
+```
+
+For the exact look, load the Geist fonts:
+
+```html
+<link
+  href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap"
+  rel="stylesheet"
+/>
+```
+
+## Updating Tweakpane
+
+This repository is a **fork of [`cocopon/tweakpane`](https://github.com/cocopon/tweakpane)**:
+the entire Driftpane layer lives in [`driftpane/`](./driftpane) and never touches
+the core, so pulling upstream stays conflict-free.
+
+```bash
+cd driftpane
+./update-tweakpane.sh            # fetch upstream/main and realign the demo CDN pin
+./update-tweakpane.sh v4.1.0     # or a specific release/branch
+```
+
+## Documentation
+
+Full docs (architecture, the preset model, localStorage keys, the core
+positional-import constraint, demo instructions) are in
+**[`driftpane/README.md`](./driftpane/README.md)**.
 
 ## License
-MIT License. See `LICENSE.txt` for more information.
 
-
-[dat.GUI]: https://github.com/dataarts/dat.gui
-[documents]: https://tweakpane.github.io/docs/
+MIT. Tweakpane itself is © [cocopon](https://github.com/cocopon), also MIT.
+</content>

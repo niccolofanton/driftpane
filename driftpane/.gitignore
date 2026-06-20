@@ -1,0 +1,6 @@
+# Artefatti di build/test del package Driftpane.
+# Tenuti qui (non nel .gitignore root) per non sporcare un file condiviso con
+# upstream Tweakpane e mantenere i merge da upstream privi di conflitti.
+/dist/
+/coverage/
+/node_modules/

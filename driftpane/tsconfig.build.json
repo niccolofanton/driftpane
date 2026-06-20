@@ -1,0 +1,14 @@
+{
+	"//": "Production build config: emits ESM JS + .d.ts from src/ into dist/.",
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": false,
+		"declaration": true,
+		"declarationMap": true,
+		"sourceMap": true,
+		"rootDir": "src",
+		"outDir": "dist"
+	},
+	"include": ["src/**/*.ts"],
+	"exclude": ["test", "demo", "dist", "node_modules"]
+}

@@ -1,0 +1,367 @@
+/*
+ * Driftpane theme — the "Apple-minimal / frosted glass" skin for the Tweakpane
+ * v4 panels managed by Driftpane.
+ *
+ * USAGE:  import 'driftpane/theme.css';   (or <link> to the file)
+ *
+ * - Dark by DEFAULT. Driftpane can set `data-theme` AUTOMATICALLY on the panel
+ *   element (light/dark/auto, via an option or from the selector in the presets
+ *   folder): 'auto' follows the system `prefers-color-scheme`. Since custom CSS
+ *   variables are inherited, defining them on the panel element (pane.element
+ *   with data-theme) overrides the :root ones for the panel subtree. Manual use
+ *   at the global level with data-theme="light" on an ancestor (typically
+ *   <html data-theme="light">) remains valid too.
+ * - Font: uses 'Geist' / 'Geist Mono' if available, falling back to system-ui /
+ *   ui-monospace. For a look identical to the demo, load the Geist fonts:
+ *   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+ * - The helper variables are prefixed --dp-* so they do not collide with the
+ *   consumer project's CSS; the --tp-* ones are Tweakpane's official theming API.
+ */
+
+:root,
+[data-theme='dark'] {
+	/* Skin helpers (namespaced). */
+	--dp-line: rgba(255, 255, 255, 0.09);
+	--dp-accent-soft: rgba(255, 255, 255, 0.06);
+	--dp-glass-border: rgba(255, 255, 255, 0.08);
+	--dp-radius: 4px;
+	--dp-picker-veil: hsla(240, 7%, 9%, 0.5);
+	/* Slider "lever" (the grip that is dragged): SOLID color and ~30% darker
+	   than the button-bg, so it is a crisp grip instead of a translucent block. */
+	--dp-slider-knob: hsl(240, 5%, 15%);
+	--dp-slider-knob-hover: hsl(240, 5%, 20%);
+
+	/* --- Tweakpane theme (cool neutral grays, glass, 4px radii) --- */
+	/* Opacity 0.82: stays frosted but does NOT lighten too much over light
+	   backgrounds, so labels/headers stay legible. */
+	--tp-base-background-color: hsla(240, 7%, 9%, 0.82);
+	--tp-base-shadow-color: hsla(240, 12%, 2%, 0.6);
+	--tp-base-border-radius: 4px;
+	--tp-blade-border-radius: 4px;
+	--tp-blade-horizontal-padding: 10px;
+
+	--tp-button-background-color: hsla(240, 5%, 22%, 0.9);
+	--tp-button-background-color-hover: hsla(240, 5%, 28%, 0.95);
+	--tp-button-background-color-focus: hsla(240, 6%, 32%, 1);
+	--tp-button-background-color-active: hsla(240, 7%, 38%, 1);
+	--tp-button-foreground-color: hsl(240, 8%, 90%);
+
+	--tp-container-background-color: hsla(240, 5%, 16%, 0.45);
+	--tp-container-background-color-hover: hsla(240, 6%, 20%, 0.5);
+	--tp-container-background-color-focus: hsla(240, 6%, 23%, 0.55);
+	--tp-container-background-color-active: hsla(240, 7%, 26%, 0.6);
+	--tp-container-foreground-color: hsl(240, 6%, 90%);
+
+	/* OPAQUE (not translucent): the value/slider boxes must be solid, not letting
+	   the frosted glass show through. Lightened ~30% from before: they were too
+	   dark (almost equal to the panel base) and disappeared. */
+	--tp-input-background-color: hsl(240, 9%, 12%);
+	--tp-input-background-color-hover: hsl(240, 9%, 16%);
+	--tp-input-background-color-focus: hsl(240, 10%, 18%);
+	--tp-input-background-color-active: hsl(240, 11%, 21%);
+	--tp-input-foreground-color: hsl(240, 8%, 84%);
+
+	--tp-label-foreground-color: hsl(240, 8%, 83%);
+	--tp-monitor-background-color: hsla(240, 9%, 8%, 0.7);
+	--tp-monitor-foreground-color: hsl(240, 7%, 78%);
+	--tp-groove-foreground-color: hsla(240, 6%, 32%, 0.6);
+}
+
+/*
+ * LIGHT THEME — same cool-tinted gray scale but in light mode (inspired by
+ * Apple's Human Interface Guidelines): translucent WHITE card floating on a soft
+ * shadow; never pure white/black. Active with data-theme="light".
+ */
+[data-theme='light'] {
+	--dp-line: rgba(0, 0, 0, 0.07);
+	--dp-accent-soft: rgba(0, 0, 0, 0.04);
+	--dp-glass-border: rgba(0, 0, 0, 0.05);
+	--dp-picker-veil: hsla(0, 0%, 100%, 0.72);
+	/* Slider lever in light mode: SOLID medium gray (light button-bg ~30% darker). */
+	--dp-slider-knob: hsl(240, 6%, 64%);
+	--dp-slider-knob-hover: hsl(240, 6%, 56%);
+
+	--tp-base-background-color: hsla(0, 0%, 100%, 0.82);
+	--tp-base-shadow-color: hsla(240, 10%, 50%, 0.12);
+
+	--tp-button-background-color: hsla(240, 13%, 95%, 0.92);
+	--tp-button-background-color-hover: hsla(240, 12%, 91%, 0.96);
+	--tp-button-background-color-focus: hsla(240, 11%, 88%, 1);
+	--tp-button-background-color-active: hsla(240, 10%, 84%, 1);
+	--tp-button-foreground-color: hsl(240, 6%, 11%);
+
+	--tp-container-background-color: hsla(240, 16%, 96%, 0.55);
+	--tp-container-background-color-hover: hsla(240, 14%, 93%, 0.62);
+	--tp-container-background-color-focus: hsla(240, 13%, 90%, 0.68);
+	--tp-container-background-color-active: hsla(240, 12%, 88%, 0.72);
+	--tp-container-foreground-color: hsl(240, 4%, 32%);
+
+	--tp-input-background-color: hsla(0, 0%, 100%, 0.9);
+	--tp-input-background-color-hover: hsla(240, 30%, 99%, 0.95);
+	--tp-input-background-color-focus: hsla(0, 0%, 100%, 1);
+	--tp-input-background-color-active: hsla(240, 30%, 98%, 1);
+	--tp-input-foreground-color: hsl(240, 6%, 13%);
+
+	--tp-label-foreground-color: hsl(240, 3%, 46%);
+	--tp-monitor-background-color: hsla(240, 18%, 97%, 0.7);
+	--tp-monitor-foreground-color: hsl(240, 5%, 20%);
+	--tp-groove-foreground-color: hsla(240, 8%, 74%, 0.6);
+}
+
+/*
+ * OVERRIDES ON THE TWEAKPANE PANEL — frosted glass, Geist font, 4px radii.
+ * !important because Tweakpane injects its CSS at runtime.
+ */
+.tp-rotv {
+	backdrop-filter: blur(18px) saturate(1.4);
+	-webkit-backdrop-filter: blur(18px) saturate(1.4);
+	border: 1px solid var(--dp-glass-border);
+	/* Enables the NATIVE height 0 <-> auto transition of the fold (see below). */
+	interpolate-size: allow-keywords;
+}
+.tp-rotv,
+.tp-rotv * {
+	font-family: 'Geist', system-ui, -apple-system, sans-serif !important;
+}
+.tp-rotv input,
+.tp-rotv select,
+.tp-rotv .tp-txtv_i,
+.tp-rotv .tp-mllv_i {
+	font-family: 'Geist Mono', ui-monospace, monospace !important;
+}
+
+/* Frosted on popups too (color picker, lists, points...). */
+.tp-popv {
+	backdrop-filter: blur(18px) saturate(1.4);
+	-webkit-backdrop-filter: blur(18px) saturate(1.4);
+	border: 1px solid var(--dp-glass-border);
+}
+/* Inline color picker: its own frosted veil. */
+.tp-rotv .tp-colpv {
+	background-color: var(--dp-picker-veil);
+	backdrop-filter: blur(14px) saturate(1.3);
+	-webkit-backdrop-filter: blur(14px) saturate(1.3);
+	border-radius: var(--dp-radius);
+}
+
+/* Light theme refinement: depth from a soft shadow, not from a strong border. */
+[data-theme='light'] .tp-rotv {
+	border-color: rgba(0, 0, 0, 0.05);
+	box-shadow:
+		0 1px 2px rgba(0, 0, 0, 0.04),
+		0 10px 30px rgba(0, 0, 0, 0.07);
+}
+[data-theme='light'] .tp-popv {
+	border-color: rgba(0, 0, 0, 0.06);
+	box-shadow:
+		0 2px 6px rgba(0, 0, 0, 0.06),
+		0 12px 32px rgba(0, 0, 0, 0.1);
+}
+
+/*
+ * SLIDER "LEVER" — the square grip that is dragged (.tp-sldv_k::after).
+ * By default it uses --tp-button-bg (translucent); here we make it SOLID and
+ * ~30% darker so it is a crisp grip clearly visible on the groove. The fill bar
+ * (.tp-sldv_k::before) stays on --tp-input-fg.
+ */
+.tp-rotv .tp-sldv_k::after {
+	background-color: var(--dp-slider-knob) !important;
+}
+.tp-rotv .tp-sldv_t:hover .tp-sldv_k::after,
+.tp-rotv .tp-sldv_t:focus .tp-sldv_k::after,
+.tp-rotv .tp-sldv_t:active .tp-sldv_k::after {
+	background-color: var(--dp-slider-knob-hover) !important;
+}
+
+/*
+ * FOLDER HIERARCHY (accordion) — FLAT sections without side borders.
+ * Nesting is read from: text indentation per level, a +/- marker, and a
+ * horizontal hairline under each header.
+ */
+
+/* Folder header + root title-bar: transparent background (shows the frosted),
+   hairline under the folders. */
+.tp-rotv .tp-fldv > .tp-fldv_b {
+	background-color: transparent;
+	box-shadow: inset 0 -1px 0 var(--dp-line);
+}
+.tp-rotv > .tp-rotv_b {
+	background-color: transparent;
+}
+/* Only hover colors; focus/active do not stay colored after the click. */
+.tp-rotv .tp-fldv > .tp-fldv_b:focus,
+.tp-rotv .tp-fldv > .tp-fldv_b:active,
+.tp-rotv > .tp-rotv_b:focus,
+.tp-rotv > .tp-rotv_b:active {
+	background-color: transparent;
+}
+.tp-rotv .tp-fldv > .tp-fldv_b:hover,
+.tp-rotv > .tp-rotv_b:hover {
+	background-color: var(--dp-accent-soft);
+}
+
+/* No vertical frames: remove the left "spine" of folders and tabs, remove the
+   rounded corners of the folders. */
+.tp-rotv .tp-fldv_i,
+.tp-rotv .tp-tabv_i {
+	display: none;
+}
+.tp-rotv .tp-fldv_b,
+.tp-rotv .tp-fldv_c {
+	border-radius: 0 !important;
+}
+/* Tab: top corners rounded to 4px. */
+.tp-rotv .tp-tbiv_b::before {
+	border-radius: 4px 4px 0 0;
+}
+
+/* Indentation of the TEXT ONLY (folder titles + labels), not the boxes, per
+   nesting level. Full-width headers (the hairlines reach all the way to the
+   opposite edge). */
+.tp-rotv .tp-fldv_c {
+	padding-left: 0;
+}
+.tp-rotv .tp-fldv_c > .tp-cntv {
+	margin-left: 0;
+}
+.tp-rotv .tp-lblv_l,
+.tp-rotv .tp-fldv_t {
+	padding-left: 12px;
+}
+.tp-rotv .tp-fldv_c .tp-fldv_c .tp-lblv_l,
+.tp-rotv .tp-fldv_c .tp-fldv_c .tp-fldv_t {
+	padding-left: 24px;
+}
+.tp-rotv .tp-fldv_c .tp-fldv_c .tp-fldv_c .tp-lblv_l,
+.tp-rotv .tp-fldv_c .tp-fldv_c .tp-fldv_c .tp-fldv_t {
+	padding-left: 36px;
+}
+
+/* Small "folder" icon before each folder name (monochrome SVG via mask ->
+   inherits currentColor, consistent with dark/light). */
+.tp-rotv .tp-fldv_t::before,
+.tp-rotv .tp-rotv_t::before {
+	content: '';
+	display: inline-block;
+	width: 10.8px;
+	height: 10.8px;
+	margin-right: 7px;
+	vertical-align: -1px;
+	background-color: currentColor;
+	opacity: 0.8;
+	-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+}
+
+/* Accordion +/- marker (in place of the default icon) on folders and root. */
+.tp-rotv .tp-fldv_m,
+.tp-rotv .tp-rotv_m {
+	background: none !important;
+	transform: none !important;
+	width: 9px;
+	height: 9px;
+	right: calc(var(--cnt-hp) + (var(--cnt-usz) + 4px - 9px) / 2 - 2px);
+	opacity: 0.5;
+}
+.tp-rotv .tp-fldv_m::before,
+.tp-rotv .tp-fldv_m::after,
+.tp-rotv .tp-rotv_m::before,
+.tp-rotv .tp-rotv_m::after {
+	content: '';
+	position: absolute;
+	background-color: var(--cnt-fg);
+	border-radius: 1px;
+}
+/* Horizontal bar ("−"): always present. */
+.tp-rotv .tp-fldv_m::before,
+.tp-rotv .tp-rotv_m::before {
+	left: 0;
+	right: 0;
+	top: 50%;
+	height: 1.5px;
+	margin-top: -0.75px;
+}
+/* Vertical bar (forms the "+"): hidden when open. */
+.tp-rotv .tp-fldv_m::after,
+.tp-rotv .tp-rotv_m::after {
+	top: 0;
+	bottom: 0;
+	left: 50%;
+	width: 1.5px;
+	margin-left: -0.75px;
+	transition: opacity 0.2s ease;
+}
+.tp-rotv .tp-fldv.tp-fldv-expanded > .tp-fldv_b > .tp-fldv_m::after,
+.tp-rotv.tp-rotv-expanded .tp-rotv_m::after {
+	opacity: 0;
+}
+
+/*
+ * "DYNAMIC ISLAND" COLLAPSE of the root panel — asymmetric:
+ * • CLOSING: first the content closes, THEN the bar shrinks into a pill.
+ * • 2-step OPENING: the pill turns back into a bar (0.2s), then the content
+ *   opens with the native fold (0.2s delay). height 0<->auto via
+ *   interpolate-size, so it lands on the real height without jumps.
+ */
+.tp-rotv.tp-rotv-expanded {
+	border-radius: 4px;
+	transition:
+		width 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
+		border-radius 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
+		box-shadow 0.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.tp-rotv.tp-rotv-expanded > .tp-rotv_b {
+	border-radius: 4px 4px 0 0 !important;
+	transition:
+		height 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
+		line-height 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
+		border-radius 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
+		background-color 0.18s ease !important;
+}
+.tp-rotv.tp-rotv-expanded > .tp-rotv_c {
+	height: auto !important;
+	transition:
+		height 0.26s cubic-bezier(0.4, 0, 0.2, 1) 0.2s,
+		opacity 0.2s linear 0.22s,
+		padding 0.26s cubic-bezier(0.4, 0, 0.2, 1) 0.2s !important;
+}
+/* Clip the content during the transition (the .tp-rotv-cpl class is present only
+   at rest): this way the content is clipped by the height growth and does not
+   "spill", while at rest the picker popovers are not cut off. */
+.tp-rotv:not(.tp-rotv-cpl) > .tp-rotv_c {
+	overflow: hidden !important;
+}
+/* Keep the content ALWAYS rendered even when collapsed (Tweakpane sets
+   display:none at rest): without this, the height 0->auto transition could not
+   start (a transition from display:none does not animate). */
+.tp-rotv.tp-rotv-cpl:not(.tp-rotv-expanded) > .tp-rotv_c {
+	display: block !important;
+}
+/* COLLAPSED state: bar that morphs into a pill (radius delayed). */
+.tp-rotv:not(.tp-rotv-expanded) {
+	width: 168px !important;
+	border-radius: 999px;
+	transition:
+		width 0.5s cubic-bezier(0.34, 1.5, 0.5, 1) 0.24s,
+		border-radius 0.42s cubic-bezier(0.34, 1.5, 0.5, 1) 0.3s,
+		box-shadow 0.42s ease 0.24s;
+}
+.tp-rotv:not(.tp-rotv-expanded) > .tp-rotv_b {
+	height: 36px;
+	line-height: 36px;
+	border-radius: 999px !important;
+	transition:
+		height 0.5s cubic-bezier(0.34, 1.5, 0.5, 1) 0.24s,
+		line-height 0.5s cubic-bezier(0.34, 1.5, 0.5, 1) 0.24s,
+		border-radius 0.42s cubic-bezier(0.34, 1.5, 0.5, 1) 0.3s,
+		background-color 0.18s ease !important;
+}
+.tp-rotv:not(.tp-rotv-expanded) > .tp-rotv_c {
+	height: 0 !important;
+	transition:
+		height 0.26s ease,
+		opacity 0.16s ease,
+		padding 0.26s ease !important;
+}

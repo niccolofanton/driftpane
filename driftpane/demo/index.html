@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Driftpane — demo</title>
+
+		<!--
+			IMPORT-MAP: maps the 'tweakpane' specifier to the ESM 4.0.5 build on a
+			CDN (jsDelivr). This way the demo opens in the browser WITHOUT building
+			the monorepo.
+
+			NB: it uses 'dist/tweakpane.js' (ES module with named exports) and NOT
+			'tweakpane.min.js' (UMD bundle, not importable as an ES module).
+
+			IN PRODUCTION the 'tweakpane' import would be resolved from the
+			workspace package (packages/tweakpane).
+		-->
+		<script type="importmap">
+			{
+				"imports": {
+					"tweakpane": "https://cdn.jsdelivr.net/npm/tweakpane@4.0.5/dist/tweakpane.js"
+				}
+			}
+		</script>
+
+		<!-- Geist family (Vercel): sans (thin->bold) + mono, for ALL text. -->
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Geist:wght@100;200;300;400;500;600;700;800;900&family=Geist+Mono:wght@300;400;500;600&display=swap"
+			rel="stylesheet"
+		/>
+
+		<style>
+			:root {
+				color-scheme: dark;
+
+				/*
+					DESIGN SYSTEM — monochrome, cool-tinted gray scale (hue 240, low
+					saturation). Rules: never pure black/white (off-black #0c0c0e,
+					off-white #ededee); layered elevations; text on three contrast
+					levels; low-opacity borders; uniform 4px radii; monochrome accent
+					(near-white) used sparingly.
+				*/
+				--bg: #0c0c0e;
+				--fg: #ededee;
+				--muted: #9a9aa2;
+				--faint: #65656d;
+				--line: rgba(255, 255, 255, 0.09);
+				--surface: rgba(255, 255, 255, 0.03);
+				--accent: #f4f4f6;
+				--accent-soft: rgba(255, 255, 255, 0.06);
+				--radius: 4px;
+				--grad: linear-gradient(180deg, #fbfbfc 0%, #9a9aa1 100%);
+				--glass-border: rgba(255, 255, 255, 0.08);
+				--picker-veil: hsla(240, 7%, 9%, 0.5);
+
+				/* --- Tweakpane theme (neutral grays, glass, 4px radii) --- */
+				/* Opacity raised (0.62 -> 0.82): stays frosted but does NOT lighten
+				   too much over light backgrounds, so labels/headers stay legible. */
+				--tp-base-background-color: hsla(240, 7%, 9%, 0.82);
+				--tp-base-shadow-color: hsla(240, 12%, 2%, 0.6);
+				--tp-base-border-radius: 4px;
+				--tp-blade-border-radius: 4px;
+				--tp-blade-horizontal-padding: 10px;
+
+				--tp-button-background-color: hsla(240, 5%, 22%, 0.9);
+				--tp-button-background-color-hover: hsla(240, 5%, 28%, 0.95);
+				--tp-button-background-color-focus: hsla(240, 6%, 32%, 1);
+				--tp-button-background-color-active: hsla(240, 7%, 38%, 1);
+				--tp-button-foreground-color: hsl(240, 8%, 90%);
+
+				--tp-container-background-color: hsla(240, 5%, 16%, 0.45);
+				--tp-container-background-color-hover: hsla(240, 6%, 20%, 0.5);
+				--tp-container-background-color-focus: hsla(240, 6%, 23%, 0.55);
+				--tp-container-background-color-active: hsla(240, 7%, 26%, 0.6);
+				--tp-container-foreground-color: hsl(240, 6%, 90%);
+
+				/* OPAQUE (not translucent): the value/slider boxes must be solid,
+				   not letting the frosted glass show through. */
+				--tp-input-background-color: hsl(240, 9%, 9%);
+				--tp-input-background-color-hover: hsl(240, 9%, 12%);
+				--tp-input-background-color-focus: hsl(240, 10%, 14%);
+				--tp-input-background-color-active: hsl(240, 11%, 16%);
+				--tp-input-foreground-color: hsl(240, 8%, 84%);
+
+				--tp-label-foreground-color: hsl(240, 8%, 83%);
+				--tp-monitor-background-color: hsla(240, 9%, 6%, 0.7);
+				--tp-monitor-foreground-color: hsl(240, 7%, 78%);
+				--tp-groove-foreground-color: hsla(240, 6%, 32%, 0.6);
+			}
+
+			/*
+				LIGHT THEME — same cool-tinted gray scale but in light mode: never
+				pure white (off-white #f4f4f5), near-black text, light glass.
+				Active with [data-theme='light'] on <html>.
+			*/
+			:root[data-theme='light'] {
+				color-scheme: light;
+
+				/*
+					VERY minimal palette, inspired by Apple's Human Interface
+					Guidelines: page in a very light neutral gray, near-black text
+					(#1d1d1f, NEVER pure black), cool systemGray gray scale (hue 240
+					at very low saturation). The panel card is WHITE and floats on a
+					soft, diffuse shadow, not on a strong border.
+				*/
+				--bg: #f5f5f7;
+				--fg: #1d1d1f;
+				--muted: #6e6e73;
+				--faint: #8e8e93;
+				--line: rgba(0, 0, 0, 0.07);
+				--surface: rgba(0, 0, 0, 0.02);
+				--accent: #1d1d1f;
+				--accent-soft: rgba(0, 0, 0, 0.04);
+				--grad: linear-gradient(180deg, #1d1d1f 0%, #515154 100%);
+				--glass-border: rgba(0, 0, 0, 0.05);
+				--picker-veil: hsla(0, 0%, 100%, 0.72);
+
+				/* Translucent white card (vibrancy), soft cool-gray shadow. */
+				--tp-base-background-color: hsla(0, 0%, 100%, 0.82);
+				--tp-base-shadow-color: hsla(240, 10%, 50%, 0.12);
+
+				/* Buttons/segments: light gray track (systemGray5/6). */
+				--tp-button-background-color: hsla(240, 13%, 95%, 0.92);
+				--tp-button-background-color-hover: hsla(240, 12%, 91%, 0.96);
+				--tp-button-background-color-focus: hsla(240, 11%, 88%, 1);
+				--tp-button-background-color-active: hsla(240, 10%, 84%, 1);
+				--tp-button-foreground-color: hsl(240, 6%, 11%);
+
+				/* Folder: barely perceptible gray fill. */
+				--tp-container-background-color: hsla(240, 16%, 96%, 0.55);
+				--tp-container-background-color-hover: hsla(240, 14%, 93%, 0.62);
+				--tp-container-background-color-focus: hsla(240, 13%, 90%, 0.68);
+				--tp-container-background-color-active: hsla(240, 12%, 88%, 0.72);
+				--tp-container-foreground-color: hsl(240, 4%, 32%);
+
+				/* Input fields: white, clean. */
+				--tp-input-background-color: hsla(0, 0%, 100%, 0.9);
+				--tp-input-background-color-hover: hsla(240, 30%, 99%, 0.95);
+				--tp-input-background-color-focus: hsla(0, 0%, 100%, 1);
+				--tp-input-background-color-active: hsla(240, 30%, 98%, 1);
+				--tp-input-foreground-color: hsl(240, 6%, 13%);
+
+				--tp-label-foreground-color: hsl(240, 3%, 46%);
+				--tp-monitor-background-color: hsla(240, 18%, 97%, 0.7);
+				--tp-monitor-foreground-color: hsl(240, 5%, 20%);
+				--tp-groove-foreground-color: hsla(240, 8%, 74%, 0.6);
+			}
+
+			* {
+				box-sizing: border-box;
+			}
+			html,
+			body {
+				height: 100%;
+				margin: 0;
+			}
+			body {
+				font-family: 'Geist', system-ui, -apple-system, sans-serif;
+				background:
+					radial-gradient(
+						1100px 620px at 78% -8%,
+						rgba(255, 255, 255, 0.05),
+						transparent 60%
+					),
+					radial-gradient(
+						900px 560px at 6% 108%,
+						rgba(255, 255, 255, 0.025),
+						transparent 55%
+					),
+					var(--bg);
+				color: var(--fg);
+				overflow: hidden;
+				-webkit-font-smoothing: antialiased;
+			}
+
+			#preview {
+				position: fixed;
+				inset: 0;
+				width: 100vw;
+				height: 100vh;
+				display: block;
+			}
+
+			/* Wordmark at top right. */
+			.brand {
+				position: fixed;
+				top: 22px;
+				right: 26px;
+				text-align: right;
+				z-index: 10;
+				pointer-events: none;
+			}
+			.brand h1 {
+				margin: 0;
+				font-size: 26px;
+				font-weight: 600;
+				letter-spacing: -0.02em;
+				background: var(--grad);
+				-webkit-background-clip: text;
+				background-clip: text;
+				color: transparent;
+			}
+			.brand p {
+				margin: 2px 0 0;
+				font-family: 'Geist Mono', ui-monospace, monospace;
+				font-weight: 400;
+				font-size: 11px;
+				letter-spacing: 0.04em;
+				color: var(--muted);
+			}
+
+			/* Compact legend at the bottom (frosted glass). */
+			.legend {
+				position: fixed;
+				left: 50%;
+				bottom: 22px;
+				transform: translateX(-50%);
+				z-index: 10;
+				display: flex;
+				flex-wrap: wrap;
+				gap: 8px;
+				max-width: min(880px, 94vw);
+				padding: 10px 12px;
+				background: rgba(255, 255, 255, 0.04);
+				border: 1px solid var(--line);
+				border-radius: var(--radius);
+				backdrop-filter: blur(16px) saturate(1.3);
+				-webkit-backdrop-filter: blur(16px) saturate(1.3);
+				box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+			}
+			.legend .item {
+				display: flex;
+				align-items: baseline;
+				gap: 7px;
+				padding: 5px 11px;
+				border-radius: var(--radius);
+				font-size: 12.5px;
+				line-height: 1.35;
+				color: var(--muted);
+			}
+			.legend .item:hover {
+				background: var(--accent-soft);
+				color: var(--fg);
+			}
+			.legend .k {
+				font-family: 'Geist Mono', ui-monospace, monospace;
+				font-size: 10px;
+				font-weight: 500;
+				letter-spacing: 0.03em;
+				color: var(--faint);
+			}
+			.legend b {
+				color: var(--fg);
+				font-weight: 500;
+			}
+
+			/*
+				OVERRIDES ON THE TWEAKPANE PANEL
+				- frosted glass (the background is not just transparent: it is blurred);
+				- Geist font everywhere, Geist Mono on values;
+				- 4px radii handled via the --tp-*-border-radius above.
+				!important is used because Tweakpane injects its CSS at runtime
+				AFTER this <style>.
+			*/
+			.tp-rotv {
+				backdrop-filter: blur(18px) saturate(1.4);
+				-webkit-backdrop-filter: blur(18px) saturate(1.4);
+				border: 1px solid var(--glass-border);
+				/* Enables the NATIVE height 0 <-> auto transition (see the content
+				   fold below): this way opening lands on the real height without
+				   depending on Tweakpane's imprecise measurement. Inherited property:
+				   covers .tp-rotv_c. */
+				interpolate-size: allow-keywords;
+			}
+			.tp-rotv,
+			.tp-rotv * {
+				font-family: 'Geist', system-ui, -apple-system, sans-serif !important;
+			}
+			.tp-rotv input,
+			.tp-rotv select,
+			.tp-rotv .tp-txtv_i,
+			.tp-rotv .tp-mllv_i {
+				font-family: 'Geist Mono', ui-monospace, monospace !important;
+			}
+
+			/*
+				FROSTED GLASS ON PANELS/POPUPS TOO (colors, points, lists...).
+				Tweakpane pickers open in '.tp-popv', which already has a translucent
+				background but no blur: we make it frosted like the root panel.
+			*/
+			.tp-popv {
+				backdrop-filter: blur(18px) saturate(1.4);
+				-webkit-backdrop-filter: blur(18px) saturate(1.4);
+				border: 1px solid var(--glass-border);
+			}
+			/* The inline color picker (not in a popup) gets its own frosted veil. */
+			.tp-rotv .tp-colpv {
+				background-color: var(--picker-veil);
+				backdrop-filter: blur(14px) saturate(1.3);
+				-webkit-backdrop-filter: blur(14px) saturate(1.3);
+				border-radius: var(--radius);
+			}
+
+			/*
+				LIGHT THEME REFINEMENT ("Apple" look): in light mode the depth comes
+				from a soft, diffuse shadow, not from a strong border. Nearly
+				invisible borders + two-layer drop shadow = a card that floats on the
+				page. Applies only to [data-theme='light'], so the dark theme stays
+				unchanged.
+			*/
+			:root[data-theme='light'] .tp-rotv {
+				border-color: rgba(0, 0, 0, 0.05);
+				box-shadow:
+					0 1px 2px rgba(0, 0, 0, 0.04),
+					0 10px 30px rgba(0, 0, 0, 0.07);
+			}
+			:root[data-theme='light'] .tp-popv {
+				border-color: rgba(0, 0, 0, 0.06);
+				box-shadow:
+					0 2px 6px rgba(0, 0, 0, 0.06),
+					0 12px 32px rgba(0, 0, 0, 0.1);
+			}
+			:root[data-theme='light'] .legend {
+				background: rgba(255, 255, 255, 0.62);
+				border-color: rgba(0, 0, 0, 0.06);
+				box-shadow:
+					0 1px 2px rgba(0, 0, 0, 0.04),
+					0 10px 30px rgba(0, 0, 0, 0.07);
+			}
+
+			/*
+				FOLDER HIERARCHY (accordion) — removing the gray backgrounds stacked
+				per level (they got darker when nested) AND every vertical
+				border/frame (left spine, rounded corners): the sections are FLAT,
+				without side borders. Nesting is read from:
+				  1) a SMALL indentation of the content per level (only space, no
+				     line) -> readable accordion sub-items;
+				  2) a +/- marker ("−" when open, "+" when closed) in place of the
+				     default icon;
+				  3) a HORIZONTAL hairline under each section header.
+				We touch ONLY the folders (.tp-fldv*): tabs (.tp-tabv) and the root
+				title-bar (.tp-rotv_b) stay unchanged.
+			*/
+
+			/* 1) Folder headers AND root title-bar: TRANSPARENT background (shows
+			   the panel's frosted glass). Under the folders, a hairline as THICK as
+			   the app's other borders (2px, separator groove color). */
+			.tp-rotv .tp-fldv > .tp-fldv_b {
+				background-color: transparent;
+				box-shadow: inset 0 -1px 0 var(--line);
+			}
+			.tp-rotv > .tp-rotv_b {
+				background-color: transparent;
+			}
+			/* Only HOVER colors the header/title-bar; focus/active do NOT stay
+			   colored after the click (the order makes :hover win over :focus). */
+			.tp-rotv .tp-fldv > .tp-fldv_b:focus,
+			.tp-rotv .tp-fldv > .tp-fldv_b:active,
+			.tp-rotv > .tp-rotv_b:focus,
+			.tp-rotv > .tp-rotv_b:active {
+				background-color: transparent;
+			}
+			.tp-rotv .tp-fldv > .tp-fldv_b:hover,
+			.tp-rotv > .tp-rotv_b:hover {
+				background-color: var(--accent-soft);
+			}
+
+			/* 2) No vertical frames: remove the left "spine" (4px bar on the left
+			   side of the content) of both FOLDERS (.tp-fldv_i) and TABS
+			   (.tp-tabv_i), and remove every rounded corner of the folders
+			   (including the leftover top-left). */
+			.tp-rotv .tp-fldv_i,
+			.tp-rotv .tp-tabv_i {
+				display: none;
+			}
+			.tp-rotv .tp-fldv_b,
+			.tp-rotv .tp-fldv_c {
+				border-radius: 0 !important;
+			}
+			/* Tab: TOP corners (left/right) rounded to 4px on each cell. */
+			.tp-rotv .tp-tbiv_b::before {
+				border-radius: 4px 4px 0 0;
+			}
+			/* Indentation of the TEXT ONLY (folder titles + control labels), NOT
+			   the boxes: this way the headers stay FULL WIDTH and their hairlines
+			   reach all the way to the opposite edge. Nesting depth is counted with
+			   a custom property that accumulates at each .tp-fldv_c. Indent =
+			   (depth - 1) * 12px, never negative: top-level folders have their items
+			   flush, sub-folders are indented. The title base (+16px) aligns them
+			   with the control labels (e.g. "thickness" aligned with "Details"). */
+			.tp-rotv .tp-fldv_c {
+				padding-left: 0;
+			}
+			.tp-rotv .tp-fldv_c > .tp-cntv {
+				margin-left: 0;
+			}
+			/* Same values for control labels and folder titles -> aligned. */
+			/* base level (top-level folders and their items) */
+			.tp-rotv .tp-lblv_l,
+			.tp-rotv .tp-fldv_t {
+				padding-left: 12px;
+			}
+			/* +1 nesting level */
+			.tp-rotv .tp-fldv_c .tp-fldv_c .tp-lblv_l,
+			.tp-rotv .tp-fldv_c .tp-fldv_c .tp-fldv_t {
+				padding-left: 24px;
+			}
+			/* +2 levels */
+			.tp-rotv .tp-fldv_c .tp-fldv_c .tp-fldv_c .tp-lblv_l,
+			.tp-rotv .tp-fldv_c .tp-fldv_c .tp-fldv_c .tp-fldv_t {
+				padding-left: 36px;
+			}
+
+			/* Small "folder" icon before each folder name. Monochrome SVG via mask
+			   -> inherits currentColor (the title color), so it is automatically
+			   consistent with dark/light theme. */
+			.tp-rotv .tp-fldv_t::before,
+			.tp-rotv .tp-rotv_t::before {
+				content: '';
+				display: inline-block;
+				width: 10.8px;
+				height: 10.8px;
+				margin-right: 7px;
+				vertical-align: -1px;
+				background-color: currentColor;
+				opacity: 0.8;
+				-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z'/%3E%3C/svg%3E")
+					center / contain no-repeat;
+				mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z'/%3E%3C/svg%3E")
+					center / contain no-repeat;
+			}
+
+			/* 3) Accordion +/- marker (in place of the default icon) on the folders
+			   AND on the tweakpane root, for full consistency. */
+			.tp-rotv .tp-fldv_m,
+			.tp-rotv .tp-rotv_m {
+				background: none !important;
+				transform: none !important;
+				width: 9px;
+				height: 9px;
+				right: calc(var(--cnt-hp) + (var(--cnt-usz) + 4px - 9px) / 2 - 2px);
+				opacity: 0.5;
+			}
+			.tp-rotv .tp-fldv_m::before,
+			.tp-rotv .tp-fldv_m::after,
+			.tp-rotv .tp-rotv_m::before,
+			.tp-rotv .tp-rotv_m::after {
+				content: '';
+				position: absolute;
+				background-color: var(--cnt-fg);
+				border-radius: 1px;
+			}
+			/* Horizontal bar ("−"): always present. */
+			.tp-rotv .tp-fldv_m::before,
+			.tp-rotv .tp-rotv_m::before {
+				left: 0;
+				right: 0;
+				top: 50%;
+				height: 1.5px;
+				margin-top: -0.75px;
+			}
+			/* Vertical bar (forms the "+"): hidden when open. */
+			.tp-rotv .tp-fldv_m::after,
+			.tp-rotv .tp-rotv_m::after {
+				top: 0;
+				bottom: 0;
+				left: 50%;
+				width: 1.5px;
+				margin-left: -0.75px;
+				transition: opacity 0.2s ease;
+			}
+			.tp-rotv .tp-fldv.tp-fldv-expanded > .tp-fldv_b > .tp-fldv_m::after,
+			.tp-rotv.tp-rotv-expanded .tp-rotv_m::after {
+				opacity: 0;
+			}
+
+			/*
+				"DYNAMIC ISLAND" COLLAPSE — asymmetric:
+				• CLOSING (custom): first the content closes (height->0), THEN the bar
+				  SHRINKS in width, GROWS in height and rounds into a pill (spring with
+				  overshoot, radius delayed).
+				• OPENING (2 steps): STEP 1 the pill expands to the bar's correct shape
+				  (width/height/radius, 0.2s); STEP 2 (0.2s delay) opens the content
+				  with Tweakpane's native fold (0.2s ease-in-out).
+			*/
+			/* === 2-STEP OPENING ===
+			   STEP 1 (0 -> 0.2s): the pill expands to the bar's CORRECT shape — full
+			   width, bar height (24px), 4px radius at the top. The content stays
+			   closed (height 0, clipped), invisible.
+			   STEP 2 (0.2 -> 0.4s): only NOW the panel opens, with Tweakpane's native
+			   fold (height .2s ease-in-out) DELAYED by 0.2s. */
+			.tp-rotv.tp-rotv-expanded {
+				border-radius: 4px;
+				transition:
+					width 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
+					border-radius 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
+					box-shadow 0.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+			}
+			.tp-rotv.tp-rotv-expanded > .tp-rotv_b {
+				border-radius: 4px 4px 0 0 !important;
+				transition:
+					height 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
+					line-height 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
+					border-radius 0.2s cubic-bezier(0.22, 0.61, 0.36, 1),
+					background-color 0.18s ease !important;
+			}
+			/* STEP 2: the content fold starts AFTER the pill morph (0.2s delay).
+			   height: auto !important overrides the inline height (in px, often wrong)
+			   that Tweakpane sets; with interpolate-size the height 0 -> auto
+			   transition is NATIVE and lands exactly on the real height, without
+			   jumps. ease-out for a soft landing. */
+			.tp-rotv.tp-rotv-expanded > .tp-rotv_c {
+				height: auto !important;
+				transition:
+					height 0.26s cubic-bezier(0.4, 0, 0.2, 1) 0.2s,
+					opacity 0.2s linear 0.22s,
+					padding 0.26s cubic-bezier(0.4, 0, 0.2, 1) 0.2s !important;
+			}
+			/* CLIP during the transition. As soon as it opens, Tweakpane already
+			   sets overflow:visible on .tp-rotv_c: without this, all items show at
+			   once while the frosted panel grows behind (no clip). The .tp-rotv-cpl
+			   ("coupled") class is present ONLY at rest and is removed while
+			   animating: so we force the clip only during the morph (opening AND
+			   closing) and leave it visible at rest, so the color picker popovers
+			   are not cut off by overflow:hidden. */
+			.tp-rotv:not(.tp-rotv-cpl) > .tp-rotv_c {
+				overflow: hidden !important;
+			}
+			/* Keep the content ALWAYS rendered even when collapsed (Tweakpane sets
+			   display:none at rest): without this, the height 0->auto transition
+			   could not start (a transition starting from display:none does not
+			   animate) and the content would appear abruptly. With display:block it
+			   stays in the DOM at height 0 (clipped, invisible) and the native
+			   0 <-> auto transition starts and lands exactly. */
+			.tp-rotv.tp-rotv-cpl:not(.tp-rotv-expanded) > .tp-rotv_c {
+				display: block !important;
+			}
+			/* COLLAPSED state (destination): the content closes IMMEDIATELY, then the
+			   bar morphs into a pill (width/height/radius DELAYED). */
+			.tp-rotv:not(.tp-rotv-expanded) {
+				width: 168px !important;
+				border-radius: 999px;
+				transition:
+					width 0.5s cubic-bezier(0.34, 1.5, 0.5, 1) 0.24s,
+					border-radius 0.42s cubic-bezier(0.34, 1.5, 0.5, 1) 0.3s,
+					box-shadow 0.42s ease 0.24s;
+			}
+			.tp-rotv:not(.tp-rotv-expanded) > .tp-rotv_b {
+				height: 36px;
+				line-height: 36px;
+				border-radius: 999px !important;
+				transition:
+					height 0.5s cubic-bezier(0.34, 1.5, 0.5, 1) 0.24s,
+					line-height 0.5s cubic-bezier(0.34, 1.5, 0.5, 1) 0.24s,
+					border-radius 0.42s cubic-bezier(0.34, 1.5, 0.5, 1) 0.3s,
+					background-color 0.18s ease !important;
+			}
+			.tp-rotv:not(.tp-rotv-expanded) > .tp-rotv_c {
+				height: 0 !important;
+				transition:
+					height 0.26s ease,
+					opacity 0.16s ease,
+					padding 0.26s ease !important;
+			}
+		</style>
+	</head>
+	<body>
+		<canvas id="preview"></canvas>
+
+		<div class="brand">
+			<h1>Driftpane</h1>
+			<p>tweakpane, upgraded</p>
+		</div>
+
+		<div class="legend">
+			<span class="item"><span class="k">01</span><span><b>Persistence</b> — move sliders and folders, then <b>reload</b></span></span>
+			<span class="item"><span class="k">02</span><span><b>Drag</b> — drag from the title-bar (mouse or touch)</span></span>
+			<span class="item"><span class="k">03</span><span><b>Collapse</b> — nested sub-panels persist too</span></span>
+			<span class="item"><span class="k">04</span><span><b>Preset</b> — save · rename · export · import+apply</span></span>
+		</div>
+
+		<script type="module" src="./main.js"></script>
+	</body>
+</html>
