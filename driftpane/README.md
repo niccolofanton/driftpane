@@ -2,7 +2,7 @@
 
 ### 📖 **[Read the documentation →](#usage)**
 
-**[Usage](#usage) · [Options & API](#options-driftpaneoptions) · [Demo](#demo) · [Preset model](#preset-model)** &nbsp;|&nbsp; **[📦 npm](https://www.npmjs.com/package/driftpane)**
+**[Usage](#usage) · [Options & API](#options-driftpaneoptions) · [Demo](#demo) · [Preset model](#preset-model)** &nbsp;|&nbsp; **[📦 npm](https://www.npmjs.com/package/@niccolofanton/driftpane)**
 
 A **non-invasive** layer on top of [Tweakpane](https://tweakpane.github.io/) v4
 that adds six features without modifying the core:
@@ -25,7 +25,7 @@ that adds six features without modifying the core:
    **always pinned to the bottom** of the pane (last entry, auto-injected). A
    **"Default"** preset (the factory baseline) is always present, cannot be
    deleted or overwritten, and is the target of "Restore".
-5. **Skin theme** (requires `import 'driftpane/theme.css'`) — `light` / `dark` /
+5. **Skin theme** (requires `import '@niccolofanton/driftpane/theme.css'`) — `light` / `dark` /
    `auto`: `auto` (default) follows the system's `prefers-color-scheme` in real
    time. Settable at init (`theme`), at runtime (`driftpane.theme.set(...)`) or
    from an optional control in the preset folder.
@@ -41,11 +41,11 @@ The layer uses **only the `Pane`'s public API**
 ## Installation
 
 ```bash
-npm install driftpane tweakpane
+npm install @niccolofanton/driftpane tweakpane
 ```
 
 `tweakpane` is a **peer dependency** (Tweakpane v4, `tweakpane@^4.0.0`): install
-it alongside Driftpane. The public import is `from 'driftpane'` (not a path
+it alongside Driftpane. The public import is `from '@niccolofanton/driftpane'` (not a path
 relative to `src/`).
 
 ## Structure
@@ -84,7 +84,7 @@ driftpane/
 
 ```ts
 import {Pane} from 'tweakpane';
-import {createDriftpane} from 'driftpane';
+import {createDriftpane} from '@niccolofanton/driftpane';
 
 const params = {speed: 0.5, color: '#1e1e1e'};
 
@@ -100,7 +100,7 @@ const panel = createDriftpane(pane, {
   presetsEnabled: true,
   presetFolderTitle: 'Preset',
   clampToViewport: true,
-  theme: 'auto', // 'auto' | 'light' | 'dark'  (requires import 'driftpane/theme.css')
+  theme: 'auto', // 'auto' | 'light' | 'dark'  (requires import '@niccolofanton/driftpane/theme.css')
   width: 280, // initial width in px
   resizableWidth: true,
   resizableHeight: true,
@@ -119,7 +119,7 @@ panel.resetState(); // clears persisted state (not presets nor position)
 ```
 
 > **Note on the production import**: the published package is consumed as
-> `driftpane` (e.g. `import {createDriftpane} from 'driftpane'`), with
+> `@niccolofanton/driftpane` (e.g. `import {createDriftpane} from '@niccolofanton/driftpane'`), with
 > `tweakpane` as a **peer dependency** (Tweakpane v4) shared by the app. The
 > demo, by contrast, uses an import-map to a CDN purely so it can be opened in
 > the browser without building the monorepo.
