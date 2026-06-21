@@ -15,7 +15,7 @@
 //   }
 // The import accepts the collection envelope, a single "bare" DriftpanePreset,
 // or a raw exportState state (BladeState) -> new preset.
-import { mergeManagerChild, stripManagerChild, structureSignature, } from './state-scope.js';
+import { mergeManagerChild, overlayExpanded, stripExpanded, stripManagerChild, structureSignature, } from './state-scope.js';
 /** localStorage key suffix for the preset collection. */
 const PRESETS_KEY = 'presets';
 /** Format tag of the exported file. */
@@ -204,8 +204,10 @@ export class PresetController {
             if (structureSignature(preset.state) !== structureSignature(currentScoped)) {
                 return false;
             }
-            // Re-insert the preset folder (live state) for the positional match.
-            const full = mergeManagerChild(live, preset.state, managerIndex);
+            // Re-insert the preset folder (live state) for the positional match,
+            // then overlay the CURRENT `expanded` state so applying a preset never
+            // changes which folders/tabs are open (that memory is global).
+            const full = overlayExpanded(mergeManagerChild(live, preset.state, managerIndex), live);
             const ok = this.pane.importState(full);
             if (ok) {
                 this.store.activeId = preset.id;
@@ -323,7 +325,9 @@ export class PresetController {
     /** Scoped snapshot (without the preset folder) of the pane's current state. */
     snapshot() {
         const full = this.pane.exportState();
-        return stripManagerChild(full, this.resolveManagerIndex());
+        // Strip `expanded` so presets do NOT carry the open/closed state of
+        // folders/tabs: that memory is GLOBAL (the `state` key), not per-preset.
+        return stripExpanded(stripManagerChild(full, this.resolveManagerIndex()));
     }
     // --- Internal persistence -----------------------------------------------
     loadStore() {

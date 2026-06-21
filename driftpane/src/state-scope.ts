@@ -127,3 +127,68 @@ export function mergeManagerChild(
 		children: baseChildren,
 	};
 }
+
+/**
+ * Returns a deep copy of `state` with every `expanded` field removed. Presets use
+ * this so they do NOT store the open/closed state of folders/tabs — that memory
+ * is GLOBAL (persisted in the `state` key), not per-preset.
+ */
+export function stripExpanded(state: SerializedState): SerializedState {
+	const walk = (node: unknown): unknown => {
+		if (Array.isArray(node)) {
+			return node.map(walk);
+		}
+		if (!node || typeof node !== 'object') {
+			return node;
+		}
+		const o = node as Record<string, unknown>;
+		const out: Record<string, unknown> = {};
+		for (const key of Object.keys(o)) {
+			if (key === 'expanded') {
+				continue;
+			}
+			out[key] = walk(o[key]);
+		}
+		return out;
+	};
+	return walk(state) as SerializedState;
+}
+
+/**
+ * Returns a copy of `target` in which every node's `expanded` field is taken from
+ * the structurally-corresponding node in `source` (matched positionally by
+ * `children`/`pages` index). Applied before importing a preset so applying it
+ * keeps the CURRENT open/closed state of folders/tabs instead of forcing the
+ * preset's — and supplies the `expanded` field that `importState` requires even
+ * when the preset snapshot had it stripped.
+ */
+export function overlayExpanded(
+	target: SerializedState,
+	source: SerializedState,
+): SerializedState {
+	const walk = (t: unknown, s: unknown): unknown => {
+		if (Array.isArray(t)) {
+			return t.map((item, i) =>
+				walk(item, Array.isArray(s) ? s[i] : undefined),
+			);
+		}
+		if (!t || typeof t !== 'object') {
+			return t;
+		}
+		const to = t as Record<string, unknown>;
+		const so =
+			s && typeof s === 'object' ? (s as Record<string, unknown>) : undefined;
+		const out: Record<string, unknown> = {...to};
+		if (so && 'expanded' in so) {
+			out['expanded'] = so['expanded'];
+		}
+		if ('children' in to) {
+			out['children'] = walk(to['children'], so ? so['children'] : undefined);
+		}
+		if ('pages' in to) {
+			out['pages'] = walk(to['pages'], so ? so['pages'] : undefined);
+		}
+		return out;
+	};
+	return walk(target, source) as SerializedState;
+}

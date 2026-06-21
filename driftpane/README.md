@@ -257,7 +257,9 @@ All namespaced as `driftpane:<namespace>:<suffix>` (default namespace
 
 ## Preset model
 
-A preset is a **named**, **scoped** snapshot of `pane.exportState()`:
+A preset is a **named**, **scoped** snapshot of `pane.exportState()` — values
+only, **without** the open/closed (`expanded`) state of folders/tabs (that memory
+is global, not per-preset):
 
 ```ts
 interface DriftpanePreset {
@@ -266,7 +268,7 @@ interface DriftpanePreset {
   createdAt: number;   // epoch ms
   updatedAt: number;   // epoch ms
   custom?: boolean;    // false = "Default" baseline (not deletable/overwritable); legacy/missing = custom
-  state: Record<string, unknown>; // exportState() WITHOUT the preset folder (last child)
+  state: Record<string, unknown>; // exportState() WITHOUT the preset folder or any `expanded` flag
 }
 
 interface DriftpanePresetStore {
@@ -317,6 +319,11 @@ is computed at runtime via a lazy resolver passed in by the controllers (see
 - **Drag position independent of presets**: applying a preset only calls
   `importState()` and does not move the panel. The position lives in its own
   separate key. The preset folder offers an optional "Reset position" button.
+- **Open/closed state is global, not per-preset**: presets store values only,
+  with the `expanded` state of folders/tabs stripped out. That memory lives in
+  the global `state` key, so applying a preset never changes which panels are
+  open. At apply time the current `expanded` flags are overlaid back onto the
+  preset (`importState` requires the field).
 - **Export = the selected preset** (the file is named after it); the optional
   **Export all** button downloads a full namespace backup (`exportAllJSON()`).
   The whole preset collection stays available via the `exportJSON()` /

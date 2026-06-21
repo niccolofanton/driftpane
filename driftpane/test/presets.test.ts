@@ -329,4 +329,46 @@ describe('PresetController', () => {
 			expect(presets.isModified()).toBe(false);
 		});
 	});
+
+	describe('expanded scoping (global fold state, not per-preset)', () => {
+		it('a saved preset stores NO `expanded` field', () => {
+			const p = presets.save('Folded');
+			expect(JSON.stringify(p.state)).not.toContain('expanded');
+		});
+
+		it('applying a preset keeps the CURRENT expanded state, not the preset one', () => {
+			const p = presets.save('P');
+			// The user changes both values AND the open/closed (top expanded) state.
+			pane.state = {
+				expanded: false,
+				children: [
+					{title: 'Preset', expanded: true, children: []},
+					{binding: {key: 'speed', value: 9}},
+					{binding: {key: 'color', value: '#000'}},
+				],
+			};
+			expect(presets.apply(p.id)).toBe(true);
+			const imported = pane.lastImport as SerializedState;
+			// expanded comes from LIVE (false); values from the preset (0.5 / #fff).
+			expect(imported['expanded']).toBe(false);
+			const children = imported['children'] as Array<Record<string, unknown>>;
+			expect((children[1]['binding'] as Record<string, unknown>)['value']).toBe(
+				0.5,
+			);
+		});
+
+		it('toggling a folder open/closed does NOT mark the preset modified', () => {
+			presets.save('Stable');
+			// Same values, only the top-level expanded flips.
+			pane.state = {
+				expanded: false,
+				children: [
+					{title: 'Preset', expanded: true, children: []},
+					{binding: {key: 'speed', value: 0.5}},
+					{binding: {key: 'color', value: '#fff'}},
+				],
+			};
+			expect(presets.isModified()).toBe(false);
+		});
+	});
 });

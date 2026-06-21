@@ -30,3 +30,18 @@ export declare function stripManagerChild(full: SerializedState, managerChildInd
  * @param managerChildIndex Index of the preset folder (typically the last one).
  */
 export declare function mergeManagerChild(target: SerializedState, scoped: SerializedState, managerChildIndex: number): SerializedState;
+/**
+ * Returns a deep copy of `state` with every `expanded` field removed. Presets use
+ * this so they do NOT store the open/closed state of folders/tabs — that memory
+ * is GLOBAL (persisted in the `state` key), not per-preset.
+ */
+export declare function stripExpanded(state: SerializedState): SerializedState;
+/**
+ * Returns a copy of `target` in which every node's `expanded` field is taken from
+ * the structurally-corresponding node in `source` (matched positionally by
+ * `children`/`pages` index). Applied before importing a preset so applying it
+ * keeps the CURRENT open/closed state of folders/tabs instead of forcing the
+ * preset's — and supplies the `expanded` field that `importState` requires even
+ * when the preset snapshot had it stripped.
+ */
+export declare function overlayExpanded(target: SerializedState, source: SerializedState): SerializedState;
