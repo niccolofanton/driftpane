@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.0 (2026-06-21)
+
+### Features
+
+* **Optional "Export all" button** (`showExportAll`, hidden by default) — downloads
+  a full namespace backup as a single JSON file: panel state/folds, position,
+  width, max-height, theme and every preset. New `driftpane.exportAllJSON()` API.
+* **"Export" now exports the SELECTED preset**, as a single JSON file named after
+  it (e.g. `My Preset.json`), instead of the whole collection under a fixed name.
+  The full collection stays available via the `exportJSON()` / `exportPresetJSON(id)`
+  programmatic APIs.
+
+### Changes
+
+* **Open/closed state is now global, not per-preset** — presets store values only;
+  the `expanded` state of folders/tabs is stripped from snapshots and re-applied
+  from the live state on apply. Applying a preset no longer changes which panels
+  are open, and toggling a fold no longer marks the preset as modified.
+
 ## 1.0.0 (2026-06-20)
 
 First public release of Driftpane — a non-invasive layer on Tweakpane v4 that,
