@@ -1,4 +1,16 @@
+<div align="center">
+
 # Driftpane
+
+**A non-invasive layer on Tweakpane v4: localStorage persistence, a draggable/resizable panel, persistent folds, and a save/apply/export presets menu.**
+
+[![npm version](https://img.shields.io/npm/v/@niccolofanton/driftpane?color=cb3837&logo=npm)](https://www.npmjs.com/package/@niccolofanton/driftpane)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.txt)
+[![GitHub stars](https://img.shields.io/github/stars/niccolofanton/driftpane?style=social)](https://github.com/niccolofanton/driftpane/stargazers)
+
+**[Live demo](https://driftpane.niccolofanton.dev) · [Documentation](https://github.com/niccolofanton/driftpane/tree/main/driftpane#readme)**
+
+</div>
 
 **Driftpane** is a small, **non-invasive** layer on top of
 [Tweakpane](https://tweakpane.github.io/) v4 that turns a debug panel into a
@@ -23,12 +35,12 @@ Driftpane uses **only Tweakpane's public API** (`exportState` / `importState`,
 `on('fold')`). No core file is modified — so this fork stays cleanly mergeable
 with upstream Tweakpane (see [below](#updating-tweakpane)).
 
-> 📦 The package and its full documentation live in **[`driftpane/`](./driftpane)**.
+> 📦 The package and its full documentation live in **[`driftpane/`](https://github.com/niccolofanton/driftpane/tree/main/driftpane)**.
 
 ## Install
 
 ```bash
-npm install driftpane tweakpane
+npm install @niccolofanton/driftpane tweakpane
 ```
 
 `tweakpane` is a **peer dependency** (Tweakpane v4, `tweakpane@^4.0.0`): install
@@ -38,7 +50,7 @@ it alongside Driftpane.
 
 ```ts
 import {Pane} from 'tweakpane';
-import {createDriftpane} from 'driftpane';
+import {createDriftpane} from '@niccolofanton/driftpane';
 
 const params = {speed: 0.5, color: '#1e1e1e'};
 
@@ -71,7 +83,7 @@ An "Apple-minimal / frosted glass" skin ships with the package — dark by defau
 light via `data-theme="light"`:
 
 ```ts
-import 'driftpane/theme.css';
+import '@niccolofanton/driftpane/theme.css';
 ```
 
 For the exact look, load the Geist fonts:
@@ -86,7 +98,7 @@ For the exact look, load the Geist fonts:
 ## Updating Tweakpane
 
 This repository is a **fork of [`cocopon/tweakpane`](https://github.com/cocopon/tweakpane)**:
-the entire Driftpane layer lives in [`driftpane/`](./driftpane) and never touches
+the entire Driftpane layer lives in [`driftpane/`](https://github.com/niccolofanton/driftpane/tree/main/driftpane) and never touches
 the core, so pulling upstream stays conflict-free.
 
 ```bash
@@ -99,9 +111,8 @@ cd driftpane
 
 Full docs (architecture, the preset model, localStorage keys, the core
 positional-import constraint, demo instructions) are in
-**[`driftpane/README.md`](./driftpane/README.md)**.
+**[`driftpane/README.md`](https://github.com/niccolofanton/driftpane/tree/main/driftpane#readme)**.
 
 ## License
 
 MIT. Tweakpane itself is © [cocopon](https://github.com/cocopon), also MIT.
-</content>
