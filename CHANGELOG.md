@@ -1,32 +1,75 @@
 # Changelog
 
-All notable changes to **Driftpane** are documented in this file.
+## 1.1.0 (2026-06-21)
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+### Features
 
-> The package-local, release-please-managed changelog lives at
-> [`driftpane/CHANGELOG.md`](./driftpane/CHANGELOG.md).
+* **Optional "Export all" button** (`showExportAll`, hidden by default) — downloads
+  a full namespace backup as a single JSON file: panel state/folds, position,
+  width, max-height, theme and every preset. New `driftpane.exportAllJSON()` API.
+* **"Export" now exports the SELECTED preset**, as a single JSON file named after
+  it (e.g. `My Preset.json`), instead of the whole collection under a fixed name.
+  The full collection stays available via the `exportJSON()` / `exportPresetJSON(id)`
+  programmatic APIs.
 
-## [0.1.0] - 2026-06-20
+### Changes
 
-### Added
+* **Open/closed state is now global, not per-preset** — presets store values only;
+  the `expanded` state of folders/tabs is stripped from snapshots and re-applied
+  from the live state on apply. Applying a preset no longer changes which panels
+  are open, and toggling a fold no longer marks the preset as modified.
 
-- **Initial release.** A non-invasive TypeScript layer on top of Tweakpane v4 that adds:
-  - **State persistence** — every control value plus the expanded/collapsed state of the
-    pane and every nested folder/tab are saved to `localStorage` (debounced) and restored
-    on reload.
-  - **Draggable & resizable panel** — the pane is wrapped in a `position: fixed` container
-    you can drag (mouse + touch via Pointer Events) and resize, clamped to the viewport;
-    position and width are persisted.
-  - **Persistent nested fold state** — the open/closed state of nested folders and tabs is
-    remembered across refreshes.
-  - **Presets menu** — a Presets folder pinned to the top of the pane to save, apply
-    (dropdown), rename, export to JSON, and import from JSON (import applies immediately
-    with an on-screen toast).
-- **Public API** — `createDriftpane`, `Driftpane`, `PresetController`,
-  `DraggableController`, `PersistenceController`, and the `DriftpaneOptions`,
-  `DriftpanePreset`, `DriftpanePresetStore`, `DriftpanePosition`, and `SerializedState`
-  types.
+## 1.0.0 (2026-06-20)
 
-[0.1.0]: https://github.com/niccolofanton/driftpane/releases/tag/driftpane-v0.1.0
+First public release of Driftpane — a non-invasive layer on Tweakpane v4 that,
+through a single `createDriftpane(pane, options)` call, adds the following
+without touching the core (it uses only the public `Pane` API):
+
+### Features
+
+* **State persistence** — control values and the `expanded`/collapsed state of
+  the pane and of every folder/tab (at any nesting depth) are saved to
+  `localStorage` and restored on reload.
+* **Draggable, resizable panel** — the pane is wrapped in a `position: fixed`
+  container draggable from the title bar (mouse + touch), clamped to the
+  viewport. Handles on the right edge (width), the bottom edge (height), and the
+  bottom-right corner (both at once, like a regular window) resize it; each axis
+  can be disabled (`resizableWidth` / `resizableHeight`). Position, width, and
+  height are persisted.
+* **Presets menu** — save / restore / rename / delete / export / import named
+  snapshots of the state, in a dedicated folder auto-injected at the bottom of
+  the pane. A non-deletable, non-overwritable **"Default"** baseline (the pane's
+  factory state) is always present and is the target of *Restore*. The menu lays
+  buttons out in side-by-side rows with icons; *Delete preset* and *Reset
+  position* are opt-in (`showDeletePreset` / `showResetPosition`).
+* **Light / dark / auto skin theme** (requires `import 'driftpane/theme.css'`) —
+  `auto` (default) follows the system `prefers-color-scheme` in real time;
+  `light`/`dark` force it. Settable at init (`theme`), at runtime
+  (`driftpane.theme.set(...)`), or from an optional control in the preset folder
+  (`showThemeControl`). `data-theme` is scoped to `pane.element`.
+* **Max height + scroll** — beyond a `max-height` the content becomes scrollable.
+  Default `calc(100dvh - 48px)` (24px safe zone), always on so the panel never
+  exceeds the viewport. Configurable via `maxHeightVh` or at runtime with
+  `driftpane.setMaxHeight(n | css | null)`. The cap acts on the content, so the
+  open/close animation is unchanged.
+* **Optional "Apple-minimal" theme** shipped with the package
+  (`driftpane/theme.css`): frosted glass, a cool-gray palette, flat folders with
+  icons and +/- markers, and a "dynamic island" collapse animation. Namespaced
+  `--dp-*` helper variables.
+
+### API
+
+* `createDriftpane(pane, options)` — one call enables all features on an existing
+  `Pane`. Options include `storageNamespace`, `theme`, `maxHeightVh`, `width`,
+  `resizableWidth`, `resizableHeight`, `showThemeControl`, `showResetPosition`,
+  `showDeletePreset`, and `defaultPresetName`.
+* Public controllers exposed on the returned instance: `presets`, `draggable`,
+  `theme`, plus `savePresetAs`, `applyPreset`, `setMaxHeight`, and `resetState`.
+
+### Engineering
+
+* Ships as an npm package with `tweakpane` as a `peerDependency` (`^4.0.0`); the
+  layer lives entirely under `driftpane/` and never touches the core, so the fork
+  stays cleanly mergeable from upstream Tweakpane.
+* jsdom test suite (143 tests), strict TypeScript, ESLint + Prettier, and a
+  self-contained demo.

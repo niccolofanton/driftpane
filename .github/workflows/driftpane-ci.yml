@@ -2,15 +2,9 @@ name: driftpane-ci
 
 on:
   pull_request:
-    paths:
-      - 'driftpane/**'
-      - '.github/workflows/driftpane-ci.yml'
   push:
     branches:
       - main
-    paths:
-      - 'driftpane/**'
-      - '.github/workflows/driftpane-ci.yml'
 
 permissions:
   contents: read
@@ -21,9 +15,6 @@ jobs:
     strategy:
       matrix:
         node: [18, 20, 22]
-    defaults:
-      run:
-        working-directory: driftpane
     steps:
       - uses: actions/checkout@v4
 
@@ -31,7 +22,6 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: 'npm'
-          cache-dependency-path: driftpane/package-lock.json
 
       - run: npm ci
 
@@ -59,5 +49,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-node-${{ matrix.node }}
-          path: driftpane/coverage
+          path: coverage
           if-no-files-found: ignore
