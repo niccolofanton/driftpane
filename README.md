@@ -2,6 +2,8 @@
 
 # Driftpane
 
+![Driftpane](docs/preview.gif)
+
 **A non-invasive layer on Tweakpane v4: localStorage persistence, a draggable/resizable panel, persistent folds, and a save/apply/export presets menu.**
 
 [![npm version](https://img.shields.io/npm/v/@niccolofanton/driftpane?color=cb3837&logo=npm)](https://www.npmjs.com/package/@niccolofanton/driftpane)
