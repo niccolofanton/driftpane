@@ -58,6 +58,39 @@ export interface DriftpanePosition {
 }
 
 /**
+ * Versioned envelope carried in the share URL. It encodes a preset's identity
+ * plus its scoped (values-only) state. For a CUSTOM preset `id` is set and
+ * `d` is false; for a built-in/default preset `id` is omitted and `d` is true
+ * (its identity is the name marker, so it is never overwritten on import).
+ */
+export interface DriftpaneShareEnvelope {
+	/** Format tag. */
+	f: 'driftpane-share';
+	/** Envelope version. */
+	v: number;
+	/** Preset UUID (custom presets only). */
+	id?: string;
+	/** Human-readable preset name. */
+	n: string;
+	/** True when this is a built-in/default preset (name-marker identity). */
+	d: boolean;
+	/** Scoped, expanded-stripped pane state (values only). */
+	s: SerializedState;
+}
+
+/**
+ * Identity of the active preset, used to stamp the share URL.
+ */
+export interface DriftpaneShareIdentity {
+	/** UUID, present for custom presets. */
+	id?: string;
+	/** Preset name. */
+	name: string;
+	/** True for built-in/default presets (carried as a name marker). */
+	isDefault: boolean;
+}
+
+/**
  * Manager configuration options. All fields are optional: the defaults are
  * applied by the `Driftpane` facade.
  */
@@ -150,7 +183,51 @@ export interface DriftpaneOptions {
 	 * Default: true.
 	 */
 	resizableHeight?: boolean;
+	/**
+	 * Enables URL config sharing: the active config travels in a namespaced query
+	 * param (`<urlParamKey>:<storageNamespace>`), live-synced via `replaceState`
+	 * and reconciled (import/overwrite) when a shared link is opened. The shared
+	 * unit is a preset with identity, so the share UI lives in the preset folder —
+	 * enabling this **forces the preset menu on** even if `presetsEnabled` is
+	 * false. Default: true.
+	 */
+	urlSync?: boolean;
+	/**
+	 * Prefix for the namespaced share query param. The full key is
+	 * `<urlParamKey>:<storageNamespace>` (e.g. `dp:default`). Default: 'dp'.
+	 */
+	urlParamKey?: string;
+	/**
+	 * Called after Driftpane has applied a state to the pane, once per apply.
+	 *
+	 * You normally do NOT need this. Tweakpane's `importState()` writes through
+	 * the binding and re-emits `change` for every value that actually differs, so
+	 * side effects performed in your `change` handlers already run on restore.
+	 *
+	 * The hook exists for state your handlers do not own: a flag read once at
+	 * init, a value mirrored into your own storage key, or anything not attached
+	 * to a binding — none of which Tweakpane can restore for you.
+	 *
+	 * Called synchronously, after `pane.refresh()`. Exceptions thrown by the
+	 * callback are swallowed so a consumer bug cannot break startup.
+	 */
+	onStateApplied?: (reason: DriftpaneApplyReason) => void;
 }
+
+/**
+ * Why `onStateApplied` fired.
+ *
+ * - `restore`        — the persisted state was applied on load.
+ * - `preset`         — a preset was applied (menu or `applyPreset`).
+ * - `share`          — an incoming shared link was applied as a live preview.
+ * - `share-discard`  — a shared preview was rejected and the previous state
+ *                      was put back.
+ */
+export type DriftpaneApplyReason =
+	| 'restore'
+	| 'preset'
+	| 'share'
+	| 'share-discard';
 
 // We re-export the theme type so it is reachable from the public barrel together
 // with the other options, without consumers having to know theme-controller.

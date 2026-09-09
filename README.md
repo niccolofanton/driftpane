@@ -1,8 +1,18 @@
+<div align="center">
+
 # Driftpane
 
-### 📖 **[Read the documentation →](#usage)**
+![Driftpane](docs/preview.gif)
 
-**[Usage](#usage) · [Options & API](#options-driftpaneoptions) · [Demo](#demo) · [Preset model](#preset-model)** &nbsp;|&nbsp; **[📦 npm](https://www.npmjs.com/package/@niccolofanton/driftpane)**
+**A non-invasive layer on Tweakpane v4: localStorage persistence, a draggable/resizable panel, persistent folds, a save/apply/export presets menu and shareable config links.**
+
+[![npm version](https://img.shields.io/npm/v/@niccolofanton/driftpane?color=cb3837&logo=npm)](https://www.npmjs.com/package/@niccolofanton/driftpane)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.txt)
+[![GitHub stars](https://img.shields.io/github/stars/niccolofanton/driftpane?style=social)](https://github.com/niccolofanton/driftpane/stargazers)
+
+**[Live demo](https://driftpane.niccolofanton.dev)** &nbsp;·&nbsp; **[Usage](#usage) · [Options & API](#options-driftpaneoptions) · [Preset model](#preset-model)**
+
+</div>
 
 A **non-invasive** layer on top of [Tweakpane](https://tweakpane.github.io/) v4
 that adds six features without modifying the core:
@@ -48,38 +58,6 @@ npm install @niccolofanton/driftpane tweakpane
 it alongside Driftpane. The public import is `from '@niccolofanton/driftpane'` (not a path
 relative to `src/`).
 
-## Structure
-
-```
-driftpane/
-  src/
-    types.ts          Public types (preset, position, options)
-    storage.ts        Namespaced, defensive wrapper over localStorage
-    debounce.ts       Typed debounce with flush()/cancel()
-    state-scope.ts    Strip/merge of the preset folder (core positional constraint)
-    persistence.ts    Feature 1+3: save/restore exportState (debounced)
-    draggable.ts      Feature 2: fixed container + drag/resize (W/H/corner) via Pointer Events
-    presets.ts        Feature 4 (logic): preset CRUD, apply, export/import JSON, Default
-    preset-menu.ts    Feature 4 (UI): bottom preset folder + button rows with icons
-    theme-controller.ts Feature 5: light/dark/auto theme (follows prefers-color-scheme)
-    scroll.ts         Feature 6: max-height cap + content scroll
-    styles.ts         Injected CSS (draggable container, handles, scroll, icons)
-    driftpane.ts     Facade/orchestrator (Driftpane class)
-    index.ts          Barrel of public symbols
-  demo/
-    index.html        Self-contained demo (import-map to CDN 4.0.5)
-    main.ts           Demo TS source (usage reference)
-    tweakpane.d.ts    Minimal ambient declaration of 'tweakpane' for the demo's type-check
-    tsconfig.lib.json Builds the src/*.ts layer -> demo/lib/*.js
-    tsconfig.demo.json Builds main.ts -> main.js
-    build.sh          Runs both builds (tsc)
-    lib/              Generated JS output of the layer, imported by the demo
-    main.js           Generated JS output of the demo entry
-  tsconfig.json       Isolated type-check of the layer (strict)
-  update-tweakpane.sh Updates Tweakpane from upstream + realigns the demo CDN pin
-  README.md
-```
-
 ## Usage
 
 ```ts
@@ -109,6 +87,9 @@ const panel = createDriftpane(pane, {
   // showResetPosition: true,   // show "Reset position"
   // showDeletePreset: true,    // show "Delete preset" (custom presets only)
   // showExportAll: true,       // show "Export all" (full namespace backup)
+  urlSync: true, // shareable config links (forces the preset menu on)
+  urlParamKey: 'dp', // full param key is `<urlParamKey>:<storageNamespace>`
+  // onStateApplied: (reason) => {},  // see "Restored values reach your handlers"
 });
 
 // Programmatic API:
@@ -117,13 +98,56 @@ panel.applyPreset('<id>');
 panel.theme.set('dark'); // sets the theme; .get() / .resolved() read it back
 panel.setMaxHeight(80); // number = vh; string = CSS length; null = default
 panel.resetState(); // clears persisted state (not presets nor position)
+await panel.copyShareLink(); // share the current config as a link
 ```
 
 > **Note on the production import**: the published package is consumed as
 > `@niccolofanton/driftpane` (e.g. `import {createDriftpane} from '@niccolofanton/driftpane'`), with
 > `tweakpane` as a **peer dependency** (Tweakpane v4) shared by the app. The
 > demo, by contrast, uses an import-map to a CDN purely so it can be opened in
-> the browser without building the monorepo.
+> the browser with no build step.
+
+## Restored values reach your handlers
+
+This is the one thing worth reading before you wire Driftpane into an app that
+drives a scene from its panel.
+
+Tweakpane v4's `importState()` **does** re-fire your binding `change` handlers.
+`InputBindingController.importState` calls `binding.inject(value)` and then
+`value.fetch()`, which drives the rawValue setter and re-emits `change` for
+every value that actually differs — at any nesting depth, with `ev.last` true.
+So side effects you perform in those handlers (shader uniforms, materials,
+camera) are applied on restore, and Driftpane calls `pane.refresh()` for you.
+
+**You do not need to call your own `applyAll()` after `createDriftpane`.** Doing
+so is redundant, and in a project whose handlers trigger expensive work it is a
+performance regression: one real consumer measured three full asset reloads per
+restored page load instead of one.
+
+Values identical to the current ones do not fire, which is correct — there is
+nothing to apply.
+
+### When you do need a hook
+
+Only for state your `change` handlers do not own: a flag read once at init, a
+value mirrored into your own storage key, anything not attached to a binding.
+Tweakpane cannot restore those for you, so Driftpane offers `onStateApplied`:
+
+```ts
+createDriftpane(pane, {
+  storageNamespace: 'demo',
+  onStateApplied: (reason) => {
+    // reason: 'restore' | 'preset' | 'share' | 'share-discard'
+    renderer.setLatched(params.latch); // not a binding -> not restored for you
+  },
+});
+```
+
+It fires once per apply, synchronously, after `pane.refresh()`. An exception
+thrown by the callback is swallowed, so a consumer bug cannot break startup.
+
+This contract is covered by `test/real-tweakpane-restore.test.ts`, which drives
+the real `tweakpane` package rather than the suite's `FakePane` double.
 
 ## Options (`DriftpaneOptions`)
 
@@ -148,15 +172,75 @@ All optional; defaults are applied by the `Driftpane` facade.
 | `resizableWidth` | `boolean` | `true` | Width resize handle (right edge). |
 | `resizableHeight` | `boolean` | `true` | Height resize handle (bottom edge); the corner requires both. |
 | `maxHeightVh` | `number` | `calc(100dvh - 48px)` | Height cap in `vh`; beyond it, the content scrolls. |
+| `urlSync` | `boolean` | `true` | Shareable config links in a query param. Forces the preset menu on. |
+| `urlParamKey` | `string` | `'dp'` | Prefix of the share param; the full key is `<urlParamKey>:<storageNamespace>`. |
+| `onStateApplied` | `(reason) => void` | — | Called once after Driftpane applies a state. See [above](#when-you-do-need-a-hook). |
 
 Corresponding programmatic API: `panel.theme` (`get`/`resolved`/`set`),
 `panel.setMaxHeight(n|css|null)`, `panel.draggable.resetPosition()`,
-`panel.savePresetAs(name)`, `panel.applyPreset(id)`, `panel.resetState()`.
+`panel.savePresetAs(name)`, `panel.applyPreset(id)`, `panel.resetState()`,
+`panel.shareUrl()`, `panel.copyShareLink()`, `panel.clearShareUrl()`.
+
+## URL config sharing
+
+With `urlSync` (on by default) the active config travels in a namespaced query
+param, live-synced with `replaceState`, so a link reproduces what the sender was
+looking at:
+
+```
+?dp:demo=<encoded config>
+```
+
+The shared unit is a **preset with identity**, so the share UI lives in the
+preset folder — enabling `urlSync` therefore **forces the preset menu on** even
+if `presetsEnabled` is false. To get a pane with no preset folder at all,
+disable both.
+
+Opening a shared link applies the config as a **live preview** with persistence
+paused (the preview is never written to `localStorage`), then prompts to import,
+overwrite or discard. Discarding restores the exact pre-open state.
+
+```ts
+await panel.shareUrl(); // build the link without touching the address bar
+await panel.copyShareLink(); // build it and copy to the clipboard
+panel.clearShareUrl(); // drop the param from the address bar
+```
+
+The full format (envelope, versioning, reconciliation rules) is specified in
+[`docs/url-share-spec.md`](docs/url-share-spec.md).
+
+## Structure
+
+```
+src/
+  types.ts            Public types (preset, position, options, apply reason)
+  storage.ts          Namespaced, defensive wrapper over localStorage
+  debounce.ts         Typed debounce with flush()/cancel()
+  state-scope.ts      Strip/merge of the preset folder (core positional constraint)
+  persistence.ts      Feature 1+3: save/restore exportState (debounced)
+  draggable.ts        Feature 2: fixed container + drag/resize (W/H/corner) via Pointer Events
+  presets.ts          Feature 4 (logic): preset CRUD, apply, export/import JSON, Default
+  preset-menu.ts      Feature 4 (UI): bottom preset folder + button rows with icons
+  theme-controller.ts Feature 5: light/dark/auto theme (follows prefers-color-scheme)
+  scroll.ts           Feature 6: max-height cap + content scroll
+  url-share.ts        Feature 7: shareable config links (encode/decode, replaceState sync)
+  styles.ts           Injected CSS (draggable container, handles, scroll, icons)
+  driftpane.ts        Facade/orchestrator (Driftpane class)
+  index.ts            Barrel of public symbols
+test/                 Vitest suite; mostly against a FakePane double, plus
+                      real-tweakpane-restore.test.ts against the real package
+demo/                 Self-contained demo (import-map to a CDN build of Tweakpane)
+docs/                 preview.gif, url-share-spec.md
+theme.css             Optional "frosted glass" skin
+```
+
+Tweakpane itself is **not vendored**: it is a peer dependency, and the layer
+uses only its public `Pane` API.
 
 ## Demo
 
 The demo (`demo/index.html` + `demo/main.ts`) is self-contained and **does not
-require building the monorepo**: Tweakpane 4.0.5 is imported via import-map from
+requires no build of the package**: Tweakpane 4.0.5 is imported via import-map from
 jsDelivr (the ESM build `dist/tweakpane.js`), while the Driftpane layer is used
 from its local JS build (`demo/lib/`). The demo builds a Pane with three folders
 (`Movement`, `Appearance` with a `Stroke` sub-folder, `Advanced`), bindings of
@@ -169,11 +253,11 @@ visibly "there" after a refresh.
 `.ts` files don't run in the browser, so they must be compiled once with `tsc`:
 
 ```bash
-cd driftpane/demo
+cd demo
 ./build.sh
 # equivalent to:
-#   tsc -p tsconfig.lib.json   # driftpane/src/*.ts -> demo/lib/*.js (+ .d.ts)
-#   tsc -p tsconfig.demo.json  # demo/main.ts        -> demo/main.js
+#   tsc -p tsconfig.lib.json   # ../src/*.ts -> lib/*.js (+ .d.ts)
+#   tsc -p tsconfig.demo.json  # main.ts     -> main.js
 ```
 
 > The pre-compiled `.js` files are included: if you don't want to run `tsc`, you
@@ -185,7 +269,7 @@ Import-maps and ES modules do **not** work from `file://`: you need an HTTP
 server.
 
 ```bash
-cd driftpane/demo
+cd demo
 python3 -m http.server 8080      # or:  npx http-server -p 8080
 # then open http://localhost:8080/index.html
 ```
@@ -207,39 +291,6 @@ python3 -m http.server 8080      # or:  npx http-server -p 8080
    (with a confirmation toast). The *Theme* control, *Reset position* and
    *Delete preset* are optional (`showThemeControl` / `showResetPosition` /
    `showDeletePreset`) (feature 4 + 5).
-
-## Updating Tweakpane (pull from upstream)
-
-This repo is a **local fork** of `cocopon/tweakpane`: the `upstream` remote
-points at the original, so when an update ships you pull it from there. Because
-the Driftpane layer lives entirely in `driftpane/` and **never touches the
-core**, merges stay clean (no library file conflicts).
-
-Quick way (recommended):
-
-```bash
-cd driftpane
-./update-tweakpane.sh            # pull upstream/main and realign the CDN pin
-./update-tweakpane.sh v4.1.0     # or a specific release/branch
-```
-
-The script checks the `upstream` remote, runs `git fetch upstream --tags`,
-integrates the core updates with `git merge`, and **automatically realigns** the
-Tweakpane version used by the demo (the `tweakpane@x.y.z` pin in the import-map
-of `demo/index.html`) to the new package version.
-
-Manual equivalent:
-
-```bash
-git fetch upstream --tags
-git merge upstream/main          # or a release tag (e.g. v4.1.0)
-# if the version changes, update the pin in driftpane/demo/index.html
-(cd driftpane/demo && ./build.sh)
-```
-
-> The `upstream` remote is already configured. If you prefer, you can commit the
-> `driftpane/` layer on a branch: upstream merges stay clean anyway because they
-> share no files with the core.
 
 ## localStorage keys
 
@@ -302,8 +353,8 @@ with an on-screen warning).
 
 ## Critical core constraint (why scoping is needed)
 
-`ContainerBladeController.importState`
-(`packages/core/src/blade/common/controller/container-blade.ts`) matches its
+`ContainerBladeController.importState` (in the Tweakpane core, at
+`packages/core/src/blade/common/controller/container-blade.ts` upstream) matches its
 children **positionally** (`rack.children[index].importState(state.children[index])`)
 and requires that **every** child import successfully. Because the preset folder
 is the **last** child of the pane (we append it at the bottom), it must be
@@ -331,3 +382,7 @@ is computed at runtime via a lazy resolver passed in by the controllers (see
 - **Debounce only, no `ev.last` filter**: the trailing-edge debounce already
   collapses an entire gesture into a single write by reading `exportState()` at
   flush time.
+
+## License
+
+MIT. Tweakpane itself is © [cocopon](https://github.com/cocopon), also MIT.

@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.2.0 (2026-09-10)
+
+### Features
+
+* **`onStateApplied(reason)` hook** — called once after Driftpane applies a state
+  to the pane, with `reason` being `'restore'`, `'preset'`, `'share'` or
+  `'share-discard'`. It exists for state your `change` handlers do not own: a
+  flag read once at init, a value mirrored into your own storage key, anything
+  not attached to a binding. A throwing callback is swallowed so a consumer bug
+  cannot break startup.
+
+### Documentation
+
+* **Corrected a false caveat in the README.** It claimed that `importState()`
+  does not re-fire binding `change` handlers, and told consumers to call their
+  own `applyAll()` after `createDriftpane`. That is not what Tweakpane v4 does:
+  `InputBindingController.importState` calls `binding.inject(value)` followed by
+  `value.fetch()`, which drives the rawValue setter and re-emits `change` for
+  every value that actually differs. Side effects performed in those handlers
+  therefore already run on restore, at every nesting depth, with `ev.last` true.
+  The advice made consumers add redundant re-apply code.
+
+### Tests
+
+* **New `test/real-tweakpane-restore.test.ts`.** The rest of the suite runs
+  against the `FakePane` double, which models `importState()` as a positional
+  value copy and so could never have caught the above. These 8 tests drive the
+  real `tweakpane` package (4.0.5) through the real Driftpane and lock in the
+  contract: restore and preset-apply re-fire the handlers, only changed values
+  fire, `ev.last` is true, and `onStateApplied` fires once per apply.
+
 ## 1.1.0 (2026-06-21)
 
 ### Features

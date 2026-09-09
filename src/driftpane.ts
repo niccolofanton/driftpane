@@ -26,11 +26,22 @@ import {PersistenceController} from './persistence.js';
 import {PresetMenu} from './preset-menu.js';
 import {PresetController} from './presets.js';
 import {applyMaxHeight, clearMaxHeight} from './scroll.js';
-import {childrenCount} from './state-scope.js';
+import {
+	buildSharedImport,
+	childrenCount,
+	stripManagerChild,
+	stripReadonly,
+	structureSignature,
+} from './state-scope.js';
 import {DriftpaneStorage} from './storage.js';
 import {injectStyles} from './styles.js';
 import {DriftpaneTheme, ThemeController} from './theme-controller.js';
-import {DriftpaneOptions, DriftpanePosition} from './types.js';
+import {
+	DriftpaneApplyReason,
+	DriftpaneOptions,
+	DriftpanePosition,
+} from './types.js';
+import {UrlShareController} from './url-share.js';
 
 /**
  * Structural type of the Pane required by the facade. Uses only public members
@@ -74,6 +85,9 @@ const DEFAULTS = {
 	width: 280,
 	resizableWidth: true,
 	resizableHeight: true,
+	// URL config sharing: on by default (forces the preset menu on).
+	urlSync: true,
+	urlParamKey: 'dp',
 };
 
 /** localStorage key suffix for the user-set max-height. */
@@ -94,14 +108,26 @@ export class Driftpane {
 	private readonly presetMenu: PresetMenu | null;
 	private readonly presetsEnabled: boolean;
 	private readonly draggableEnabled: boolean;
+	/** URL sharing controller, or null when `urlSync` is disabled. */
+	private readonly urlShare: UrlShareController | null;
+	/** Resolver for the preset folder index (last child), shared by all features. */
+	private readonly managerChildIndex: number | (() => number);
 	/** Host of the height cap (the root panel, = pane.element). */
 	private readonly maxHeightHost: HTMLElement;
+	/** Consumer hook fired after every state application (see DriftpaneOptions). */
+	private readonly onStateApplied?: (reason: DriftpaneApplyReason) => void;
 
 	constructor(pane: PaneLike, opts?: DriftpaneOptions) {
 		const options = {...DEFAULTS, ...(opts ?? {})};
 		this.pane = pane;
-		this.presetsEnabled = options.presetsEnabled;
+		// URL sharing forces the preset menu on (the share UI lives in the preset
+		// folder, and the shared unit is a preset). To get a pane with no preset
+		// folder, the consumer must disable BOTH presetsEnabled and urlSync.
+		const urlSyncEnabled = options.urlSync;
+		this.presetsEnabled = options.presetsEnabled || urlSyncEnabled;
 		this.draggableEnabled = options.draggable;
+
+		this.onStateApplied = options.onStateApplied;
 
 		this.storage = new DriftpaneStorage(options.storageNamespace);
 
@@ -122,14 +148,14 @@ export class Driftpane {
 		// controller methods (apply/save/restore), always AFTER the mount, when
 		// exportState already includes the preset folder at the end. If presets are
 		// disabled there is no manager folder: index -1 (nothing is excluded).
-		const managerChildIndex: number | (() => number) = this.presetsEnabled
+		this.managerChildIndex = this.presetsEnabled
 			? (): number => childrenCount(this.pane.exportState()) - 1
 			: -1;
 
 		// The PresetController is also needed by the menu: we always create it (it
 		// is lightweight), but we mount the UI only if presetsEnabled.
 		this.presets = new PresetController(pane, this.storage, {
-			managerChildIndex,
+			managerChildIndex: this.managerChildIndex,
 		});
 
 		// (c) Mount the preset menu: the preset folder is appended at the bottom.
@@ -153,6 +179,10 @@ export class Driftpane {
 							content: this.exportAllJSON(),
 						})
 					: undefined,
+				// "Copy link" appears only when URL sharing is enabled.
+				onCopyLink: urlSyncEnabled
+					? () => void this.copyShareLink()
+					: undefined,
 			});
 			this.presetMenu.mount();
 			// Ensures a "Default" preset (non-deletable baseline) by capturing the
@@ -167,12 +197,15 @@ export class Driftpane {
 		// (d) Persistence: registers change/fold and restores the saved state.
 		this.persistence = new PersistenceController(pane, this.storage, {
 			debounceMs: options.debounceMs,
-			managerChildIndex,
+			managerChildIndex: this.managerChildIndex,
 		});
 		const restored = this.persistence.restore();
 		if (restored) {
-			// Align the UI to the imported values.
+			// Align the UI to the imported values. The binding `change` handlers
+			// have already fired: Tweakpane's importState writes through the
+			// binding and re-emits for every value that actually differs.
 			this.pane.refresh();
+			this.notifyStateApplied('restore');
 		}
 		// Always: show the Default preset in the selector and update the button
 		// states (even when there was nothing to restore).
@@ -207,6 +240,29 @@ export class Driftpane {
 					? `${options.maxHeightVh}vh`
 					: DEFAULT_MAX_HEIGHT;
 		applyMaxHeight(this.maxHeightHost, initialMaxHeight);
+
+		// (g) URL sharing: live-sync the active config into a namespaced query param
+		// and reconcile an incoming shared link (preview + prompt). Built LAST so the
+		// restore/refresh above never arms lazy sync (the listener is attached now,
+		// after those synchronous changes have already fired).
+		if (urlSyncEnabled) {
+			this.urlShare = new UrlShareController(pane, {
+				paramKey: `${options.urlParamKey}:${options.storageNamespace}`,
+				debounceMs: options.debounceMs,
+				// Normalize readonly monitors so their per-frame updates neither churn
+				// the URL nor block the realtime debounce (see stripReadonly).
+				getSnapshot: () => stripReadonly(this.presets.currentSnapshot()),
+				getIdentity: () => this.presets.activeIdentity(),
+			});
+			this.urlShare.attach();
+			if (this.urlShare.hasIncomingParam()) {
+				// Keep sync suspended until the incoming prompt is resolved.
+				this.urlShare.suspend();
+				void this.handleIncomingShare();
+			}
+		} else {
+			this.urlShare = null;
+		}
 	}
 
 	/**
@@ -269,6 +325,7 @@ export class Driftpane {
 		if (this.presets.apply(id)) {
 			this.pane.refresh();
 			this.presetMenu?.refreshList();
+			this.notifyStateApplied('preset');
 		}
 	}
 
@@ -281,12 +338,167 @@ export class Driftpane {
 		this.persistence.clear();
 	}
 
+	// --- URL sharing --------------------------------------------------------
+
+	/**
+	 * Fires the consumer hook. Wrapped: a throwing callback must not break
+	 * startup, a preset apply, or a share prompt.
+	 */
+	private notifyStateApplied(reason: DriftpaneApplyReason): void {
+		if (!this.onStateApplied) {
+			return;
+		}
+		try {
+			this.onStateApplied(reason);
+		} catch {
+			// A consumer bug is not Driftpane's problem to propagate.
+		}
+	}
+
+	/** Resolves the preset folder index (number or lazy resolver). */
+	private resolveManagerIndex(): number {
+		return typeof this.managerChildIndex === 'function'
+			? this.managerChildIndex()
+			: this.managerChildIndex;
+	}
+
+	/**
+	 * Handles an incoming shared link: applies the shared config as a live preview
+	 * (pausing persistence so the preview is never written), then prompts to
+	 * import/overwrite or discard. Async because decoding is async.
+	 */
+	private async handleIncomingShare(): Promise<void> {
+		const share = this.urlShare;
+		if (!share) {
+			return;
+		}
+		const incoming = await share.readIncoming();
+		if (incoming.kind !== 'envelope') {
+			// none / ignore / too-new: nothing to apply, just resume sync.
+			share.resume();
+			return;
+		}
+		const env = incoming.env;
+
+		// Self-skip: if the shared state already equals our local state (e.g. our
+		// OWN live-synced URL on reload, or an identical config), there is nothing
+		// to import — don't prompt, just resume sync.
+		const localStripped = JSON.stringify(
+			stripReadonly(this.presets.currentSnapshot()),
+		);
+		if (JSON.stringify(env.s) === localStripped) {
+			share.resume();
+			return;
+		}
+
+		const resolved = this.presets.resolveSharedAction(env);
+
+		this.persistence.pause();
+		const preApply = this.pane.exportState();
+		const managerIndex = this.resolveManagerIndex();
+		const merged =
+			structureSignature(env.s) !==
+			structureSignature(stripManagerChild(preApply, managerIndex));
+		const full = buildSharedImport(preApply, env.s, managerIndex);
+		this.pane.importState(full);
+		this.pane.refresh();
+		this.notifyStateApplied('share');
+
+		if (!this.presetMenu) {
+			// No preset UI to prompt with: best-effort keep the shared config.
+			this.presets.acceptSharedImport(env);
+			this.finishShareAccept();
+			return;
+		}
+
+		this.presetMenu.showSharePrompt(
+			{
+				name: env.n,
+				action: resolved.action,
+				existingName: resolved.existingName,
+				merged,
+			},
+			{
+				onImport: (): void => {
+					this.presets.acceptSharedImport(env);
+					this.finishShareAccept();
+				},
+				onOverwrite: (): void => {
+					if (typeof env.id === 'string') {
+						this.presets.acceptSharedOverwrite(env.id);
+					}
+					this.finishShareAccept();
+				},
+				onDiscard: (): void => {
+					// Revert to the pre-open state, drop the param, resume everything.
+					this.pane.importState(preApply);
+					this.pane.refresh();
+					this.notifyStateApplied('share-discard');
+					share.clear();
+					this.persistence.resume();
+					share.resume();
+					this.presetMenu?.refreshList();
+				},
+			},
+		);
+	}
+
+	/** Common tail of accepting a shared preset: persist + resume + restamp URL. */
+	private finishShareAccept(): void {
+		this.pane.refresh();
+		this.presetMenu?.refreshList();
+		this.persistence.resume();
+		// Persist the accepted (now live) state so a reload keeps it.
+		this.persistence.saveNow();
+		this.urlShare?.resume();
+		void this.urlShare?.writeNow();
+	}
+
+	/**
+	 * Builds the shareable URL for the current config WITHOUT changing the address
+	 * bar. Resolves to the current location when URL sync is disabled.
+	 */
+	public shareUrl(): Promise<string> {
+		if (!this.urlShare) {
+			return Promise.resolve(
+				typeof window !== 'undefined' ? window.location.href : '',
+			);
+		}
+		return this.urlShare.buildUrl();
+	}
+
+	/**
+	 * Writes the current config into the URL, copies it to the clipboard (when
+	 * available), and returns it.
+	 */
+	public async copyShareLink(): Promise<string> {
+		if (!this.urlShare) {
+			return typeof window !== 'undefined' ? window.location.href : '';
+		}
+		const url = await this.urlShare.writeNow();
+		try {
+			if (typeof navigator !== 'undefined' && navigator.clipboard) {
+				await navigator.clipboard.writeText(url);
+			}
+		} catch {
+			// Clipboard unavailable (insecure context / denied): the URL is still in
+			// the address bar and is returned to the caller.
+		}
+		return url;
+	}
+
+	/** Removes the share param from the URL (the "stop sharing" affordance). */
+	public clearShareUrl(): void {
+		this.urlShare?.clear();
+	}
+
 	/** Tears down the manager: removes listeners and added UI. */
 	public dispose(): void {
 		this.persistence.dispose();
 		this.draggable.dispose();
 		this.presetMenu?.dispose();
 		this.theme.dispose();
+		this.urlShare?.dispose();
 		clearMaxHeight(this.maxHeightHost);
 	}
 }
