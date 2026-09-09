@@ -54,6 +54,21 @@ function flushSave(): void {
 	vi.advanceTimersByTime(1000);
 }
 
+/**
+ * Picks a preset through the menu's own selector, which is what a click does.
+ * The preset folder is always the pane's last child and the selector its first.
+ */
+function selectPresetFromMenu(pane: Pane, id: string): void {
+	const folder = pane.children[pane.children.length - 1] as unknown as {
+		children?: {value?: unknown}[];
+	};
+	const selector = folder.children?.[0];
+	if (!selector || !('value' in selector)) {
+		throw new Error('preset selector not found as the first child');
+	}
+	selector.value = id;
+}
+
 /** Runs a "session": builds a pane, attaches Driftpane, returns both. */
 function session(opts: Partial<Parameters<typeof createDriftpane>[1]> = {}): {
 	harness: Harness;
@@ -198,6 +213,44 @@ describe('onStateApplied', () => {
 
 		drift.applyPreset(six.id);
 		expect(reasons).toEqual(['preset']);
+	});
+
+	it('fires with reason "preset" when the user picks one from the MENU', () => {
+		// Regression: 1.2.0 shipped with the hook wired only to the programmatic
+		// `applyPreset()`. Every apply that starts in the preset folder — the
+		// selector, Restore, Import, deleting the active preset — goes through
+		// PresetMenu's own `presets.apply()` + `onAfterApply()` path instead, so
+		// a consumer relying on the hook never heard about it.
+		const reasons: DriftpaneApplyReason[] = [];
+		const {harness, drift} = session({
+			onStateApplied: (r) => reasons.push(r),
+		});
+		harness.params.speed = 6;
+		harness.pane.refresh();
+		drift.savePresetAs('Six');
+		harness.params.speed = 1;
+		harness.pane.refresh();
+		reasons.length = 0;
+
+		// Saving already selected "Six", so move to the Default first — writing
+		// the same value emits nothing. Then drive the selector the way a click
+		// does, rather than calling the facade: the point of this test is the
+		// path the facade does not own.
+		const list = drift.presets.list();
+		const six = list.find((p) => p.name === 'Six');
+		const base = list.find((p) => p.name !== 'Six');
+		if (!six || !base) {
+			throw new Error('expected both the Default and the saved preset');
+		}
+		selectPresetFromMenu(harness.pane, base.id);
+		reasons.length = 0;
+		harness.applied.length = 0;
+
+		selectPresetFromMenu(harness.pane, six.id);
+
+		expect(reasons).toEqual(['preset']);
+		expect(harness.params.speed).toBe(6);
+		expect(harness.applied).toContain('speed=6');
 	});
 
 	it('swallows a throwing callback rather than breaking startup', () => {

@@ -164,7 +164,14 @@ export class Driftpane {
 		if (this.presetsEnabled) {
 			this.presetMenu = new PresetMenu(pane, this.presets, {
 				folderTitle: options.presetFolderTitle,
-				onAfterApply: () => this.pane.refresh(),
+				// Every apply that originates in the menu (select, revert, delete
+				// the active one, import) funnels through here, so this is where
+				// the consumer hook has to fire — `applyPreset()` below is only
+				// the programmatic entry point.
+				onAfterApply: () => {
+					this.pane.refresh();
+					this.notifyStateApplied('preset');
+				},
 				// Theme and "Reset position" are optional and HIDDEN by default:
 				// we pass them only if explicitly requested (the menu shows them
 				// when present). The theme is still applied by the option.

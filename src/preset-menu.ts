@@ -100,6 +100,8 @@ export class PresetMenu {
 		dispose(): void;
 	} | null = null;
 	private fileInput: HTMLInputElement | null = null;
+	/** True while refreshList() writes the selector value programmatically. */
+	private syncingList = false;
 
 	// Buttons whose disabled state depends on the active preset.
 	private saveChangesBtn: ButtonLike | null = null;
@@ -161,6 +163,10 @@ export class PresetMenu {
 		}) as PresetMenu['listBlade'];
 
 		this.listBlade?.on('change', (ev) => {
+			// Programmatic re-sync from refreshList(), not a user pick.
+			if (this.syncingList) {
+				return;
+			}
 			const id = ev.value;
 			if (typeof id === 'string' && id !== NONE_VALUE) {
 				const ok = this.presets.apply(id);
@@ -254,8 +260,18 @@ export class PresetMenu {
 		if (!this.listBlade) {
 			return;
 		}
-		this.listBlade.options = this.buildOptions();
-		this.listBlade.value = this.presets.activeId() ?? NONE_VALUE;
+		// Writing `value` emits 'change' exactly as a click would, and the
+		// handler treats that as the user picking a preset — so an unguarded
+		// refresh re-applies the active preset as a side effect, overwriting
+		// unsaved edits (e.g. after a rename) and firing the consumer's
+		// onStateApplied hook for something that is only a UI sync.
+		this.syncingList = true;
+		try {
+			this.listBlade.options = this.buildOptions();
+			this.listBlade.value = this.presets.activeId() ?? NONE_VALUE;
+		} finally {
+			this.syncingList = false;
+		}
 		this.updateButtonStates();
 	}
 

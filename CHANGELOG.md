@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.2.1 (2026-09-10)
+
+### Fixes
+
+* **`onStateApplied` never fired for presets applied from the menu.** 1.2.0 wired the
+  hook to the programmatic `applyPreset()` only. Every apply that starts in the
+  preset folder — picking from the selector, "Restore", "Import", deleting the
+  active preset — goes through `PresetMenu`'s own `presets.apply()` +
+  `onAfterApply()` path instead, so a consumer relying on the hook heard nothing.
+  The hook now fires from `onAfterApply`, which every menu-originated apply
+  funnels through.
+* **`refreshList()` re-applied the active preset as a side effect.** Writing
+  `listBlade.value` emits `change` exactly as a click does, and the handler
+  treated it as a user pick. So any list refresh — after a rename, a save, a
+  delete — silently re-applied the active preset, discarding unsaved edits, and
+  (since 1.2.0) fired `onStateApplied` for what is only a UI sync. The
+  programmatic write is now guarded. This bug predates 1.2.0; the hook is what
+  made it visible.
+
+### Tests
+
+* Two regressions added to `test/real-tweakpane-restore.test.ts`, both driving the
+  real preset selector rather than the facade — the path neither the previous
+  tests nor the `FakePane` double covered.
+
 ## 1.2.0 (2026-09-10)
 
 ### Features
