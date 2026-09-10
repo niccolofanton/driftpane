@@ -3,7 +3,74 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>Driftpane — demo</title>
+		<title>Driftpane — Tweakpane v4 persistence, presets & drag panel</title>
+		<meta
+			name="description"
+			content="Driftpane is a non-invasive layer on Tweakpane v4: localStorage state persistence, a draggable resizable panel, persistent folds, presets and shareable links."
+		/>
+		<link rel="canonical" href="https://driftpane.niccolofanton.dev/" />
+		<meta name="author" content="Niccolò Fanton" />
+		<meta name="robots" content="index, follow" />
+		<meta name="theme-color" content="#0c0c0e" />
+
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="Driftpane" />
+		<meta property="og:title" content="Driftpane — Tweakpane v4 persistence, presets & drag panel" />
+		<meta
+			property="og:description"
+			content="Driftpane is a non-invasive layer on Tweakpane v4: localStorage state persistence, a draggable resizable panel, persistent folds, presets and shareable links."
+		/>
+		<meta property="og:url" content="https://driftpane.niccolofanton.dev/" />
+		<meta property="og:image" content="https://driftpane.niccolofanton.dev/og.png" />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta property="og:image:alt" content="The Driftpane panel over the demo canvas, showing bindings, folders and the presets menu." />
+		<meta property="og:locale" content="en_US" />
+
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content="Driftpane — Tweakpane v4 persistence, presets & drag panel" />
+		<meta
+			name="twitter:description"
+			content="Driftpane is a non-invasive layer on Tweakpane v4: localStorage state persistence, a draggable resizable panel, persistent folds, presets and shareable links."
+		/>
+		<meta name="twitter:image" content="https://driftpane.niccolofanton.dev/og.png" />
+		<meta name="twitter:image:alt" content="The Driftpane panel over the demo canvas, showing bindings, folders and the presets menu." />
+
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "SoftwareApplication",
+				"name": "Driftpane",
+				"alternateName": "@niccolofanton/driftpane",
+				"applicationCategory": "DeveloperApplication",
+				"applicationSubCategory": "JavaScript library",
+				"operatingSystem": "Web browser",
+				"softwareVersion": "1.2.2",
+				"programmingLanguage": "TypeScript",
+				"license": "https://opensource.org/licenses/MIT",
+				"description": "A non-invasive layer on top of Tweakpane v4 that adds localStorage state persistence, a draggable and resizable panel, persistent fold state for the pane and every nested folder, a presets menu (save, apply, rename, export and import JSON), a light/dark/auto skin theme and shareable config links.",
+				"url": "https://driftpane.niccolofanton.dev/",
+				"image": "https://driftpane.niccolofanton.dev/og.png",
+				"downloadUrl": "https://www.npmjs.com/package/@niccolofanton/driftpane",
+				"installUrl": "https://www.npmjs.com/package/@niccolofanton/driftpane",
+				"codeRepository": "https://github.com/niccolofanton/driftpane",
+				"keywords": "tweakpane, persistence, localStorage, presets, draggable panel, debug ui, gui controls",
+				"offers": {
+					"@type": "Offer",
+					"price": "0",
+					"priceCurrency": "USD"
+				},
+				"author": {
+					"@type": "Person",
+					"name": "Niccolò Fanton",
+					"url": "https://niccolofanton.dev",
+					"sameAs": "https://github.com/niccolofanton"
+				}
+			}
+		</script>
 
 		<!--
 			IMPORT-MAP: maps the 'tweakpane' specifier to the ESM 4.0.5 build on a
@@ -209,6 +276,55 @@
 				font-size: 11px;
 				letter-spacing: 0.04em;
 				color: var(--muted);
+			}
+			.brand .about {
+				margin: 12px 0 0;
+				max-width: 360px;
+				font-size: 12px;
+				line-height: 1.55;
+				color: var(--faint);
+				font-family: inherit;
+				letter-spacing: 0;
+			}
+			.brand .links {
+				margin: 8px 0 0;
+				display: flex;
+				flex-wrap: wrap;
+				justify-content: flex-end;
+				gap: 4px 10px;
+				font-family: 'Geist Mono', ui-monospace, monospace;
+				font-size: 11px;
+				pointer-events: auto;
+			}
+			.brand .links a {
+				color: var(--muted);
+				text-decoration: none;
+				border-bottom: 1px solid var(--line);
+				padding-bottom: 1px;
+			}
+			.brand .links a:hover {
+				color: var(--accent);
+				border-bottom-color: var(--accent);
+			}
+			@media (max-width: 900px) {
+				.brand .about {
+					display: none;
+				}
+			}
+
+			/* Crawlable prose, available to readers of the page source and to
+			   assistive technology without adding visual clutter. */
+			.visually-hidden {
+				position: absolute;
+				width: 1px;
+				height: 1px;
+				margin: -1px;
+				padding: 0;
+				overflow: hidden;
+				clip: rect(0 0 0 0);
+				clip-path: inset(50%);
+				white-space: nowrap;
+				border: 0;
 			}
 
 			/* Compact legend at the bottom (frosted glass). */
@@ -569,10 +685,46 @@
 	<body>
 		<canvas id="preview"></canvas>
 
-		<div class="brand">
+		<header class="brand">
 			<h1>Driftpane</h1>
 			<p>tweakpane, upgraded</p>
-		</div>
+			<p class="about">
+				A non-invasive layer on top of Tweakpane v4. It adds localStorage state persistence, a draggable and
+				resizable panel, persistent fold state for the pane and every nested folder, a presets menu
+				(save, apply, rename, export and import JSON) and shareable config links — using only Tweakpane's
+				public API. Install it as <code>@niccolofanton/driftpane</code>; <code>tweakpane</code> stays a peer
+				dependency. The panel on the left is the live demo: change a value, collapse a folder, then reload.
+			</p>
+			<nav class="links">
+				<a href="https://www.npmjs.com/package/@niccolofanton/driftpane">Driftpane on npm</a>
+				<a href="https://github.com/niccolofanton/driftpane">Source on GitHub</a>
+				<a href="https://demos.niccolofanton.dev">More WebGL demos</a>
+				<a href="https://niccolofanton.dev">Niccolò Fanton</a>
+			</nav>
+		</header>
+
+		<section class="visually-hidden">
+			<h2>What Driftpane adds to Tweakpane v4</h2>
+			<p>
+				Driftpane wraps an existing Tweakpane v4 <code>Pane</code> and gives it the pieces Tweakpane leaves to
+				you: control values and the pane's expanded state are serialised to <code>localStorage</code> under a
+				per-project namespace and restored on reload; the pane is wrapped in a fixed container you can drag by
+				its title bar and resize from the right edge, the bottom edge or the bottom-right corner, with
+				position and size persisted; the open or closed state of the pane and of every folder and tab, at any
+				depth, survives a refresh; a presets folder pinned to the bottom of the pane saves, restores, renames,
+				deletes, exports and imports named JSON snapshots, with an undeletable "Default" baseline; a
+				light, dark or auto skin theme follows <code>prefers-color-scheme</code>; and an opt-in URL sync turns
+				the current configuration into a shareable link. It touches no Tweakpane core file, only the public
+				<code>exportState</code>, <code>importState</code>, <code>addFolder</code> and event APIs.
+			</p>
+			<p>
+				Read the documentation and the API reference in the
+				<a href="https://github.com/niccolofanton/driftpane#readme">Driftpane README on GitHub</a>, install the
+				package from <a href="https://www.npmjs.com/package/@niccolofanton/driftpane">npm</a>, browse the other
+				<a href="https://demos.niccolofanton.dev">three.js and WebGL demos by Niccolò Fanton</a>, or visit the
+				<a href="https://niccolofanton.dev">personal site of Niccolò Fanton</a>.
+			</p>
+		</section>
 
 		<div class="legend">
 			<span class="item"><span class="k">01</span><span><b>Persistence</b> — move sliders and folders, then <b>reload</b></span></span>
