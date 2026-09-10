@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.2.2 (2026-09-10)
+
+Packaging and documentation only — no runtime change.
+
+### Fixes
+
+* **The npm page rendered with broken links.** `package.json` still carried
+  `repository.directory: "driftpane"` from before the package moved to the
+  repository root, so npm resolved every relative README link against a
+  directory that no longer exists — the preview GIF 404'd. `homepage` pointed at
+  the same dead path and 404'd too. The field is removed, `homepage` corrected,
+  and the README's remaining relative links made absolute so they survive on npm.
+* **Wrong import specifier in the docs.** `theme.css` and the `theme` option's
+  JSDoc both said `driftpane/theme.css` instead of
+  `@niccolofanton/driftpane/theme.css`. The JSDoc one ships in `dist` and shows
+  up in editor tooltips.
+* The 1.2.0 entry below gained the repository flatten, which had shipped
+  undocumented.
+
 ## 1.2.1 (2026-09-10)
 
 ### Fixes
