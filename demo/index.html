@@ -7,14 +7,13 @@
 
 		<!--
 			IMPORT-MAP: maps the 'tweakpane' specifier to the ESM 4.0.5 build on a
-			CDN (jsDelivr). This way the demo opens in the browser WITHOUT building
-			the monorepo.
+			CDN (jsDelivr), so the demo opens in the browser with no bundler.
 
 			NB: it uses 'dist/tweakpane.js' (ES module with named exports) and NOT
 			'tweakpane.min.js' (UMD bundle, not importable as an ES module).
 
 			IN PRODUCTION the 'tweakpane' import would be resolved from the
-			workspace package (packages/tweakpane).
+			'tweakpane' npm package (Driftpane's peer dependency).
 		-->
 		<script type="importmap">
 			{

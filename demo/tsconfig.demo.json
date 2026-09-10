@@ -1,5 +1,5 @@
 {
-	"//": "Build dell'entry della demo (main.ts -> main.js). 'tweakpane' e tipizzato dall'ambient tweakpane.d.ts (runtime via import-map).",
+	"//": "Builds the demo entry point (main.ts -> main.js). 'tweakpane' is typed by the ambient tweakpane.d.ts; at runtime it is resolved via import-map.",
 	"compilerOptions": {
 		"target": "ES2020",
 		"module": "ESNext",

@@ -72,6 +72,8 @@ export declare class PresetMenu {
     private folder;
     private listBlade;
     private fileInput;
+    /** True while refreshList() writes the selector value programmatically. */
+    private syncingList;
     private saveChangesBtn;
     private revertBtn;
     private deleteBtn;

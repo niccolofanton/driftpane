@@ -74,6 +74,7 @@ export class Driftpane {
         const urlSyncEnabled = options.urlSync;
         this.presetsEnabled = options.presetsEnabled || urlSyncEnabled;
         this.draggableEnabled = options.draggable;
+        this.onStateApplied = options.onStateApplied;
         this.storage = new DriftpaneStorage(options.storageNamespace);
         // (a) Layer CSS.
         injectStyles(pane.element.ownerDocument);
@@ -104,7 +105,14 @@ export class Driftpane {
         if (this.presetsEnabled) {
             this.presetMenu = new PresetMenu(pane, this.presets, {
                 folderTitle: options.presetFolderTitle,
-                onAfterApply: () => this.pane.refresh(),
+                // Every apply that originates in the menu (select, revert, delete
+                // the active one, import) funnels through here, so this is where
+                // the consumer hook has to fire — `applyPreset()` below is only
+                // the programmatic entry point.
+                onAfterApply: () => {
+                    this.pane.refresh();
+                    this.notifyStateApplied('preset');
+                },
                 // Theme and "Reset position" are optional and HIDDEN by default:
                 // we pass them only if explicitly requested (the menu shows them
                 // when present). The theme is still applied by the option.
@@ -141,8 +149,11 @@ export class Driftpane {
         });
         const restored = this.persistence.restore();
         if (restored) {
-            // Align the UI to the imported values.
+            // Align the UI to the imported values. The binding `change` handlers
+            // have already fired: Tweakpane's importState writes through the
+            // binding and re-emits for every value that actually differs.
             this.pane.refresh();
+            this.notifyStateApplied('restore');
         }
         // Always: show the Default preset in the selector and update the button
         // states (even when there was nothing to restore).
@@ -252,6 +263,7 @@ export class Driftpane {
         if (this.presets.apply(id)) {
             this.pane.refresh();
             this.presetMenu?.refreshList();
+            this.notifyStateApplied('preset');
         }
     }
     /**
@@ -263,6 +275,21 @@ export class Driftpane {
         this.persistence.clear();
     }
     // --- URL sharing --------------------------------------------------------
+    /**
+     * Fires the consumer hook. Wrapped: a throwing callback must not break
+     * startup, a preset apply, or a share prompt.
+     */
+    notifyStateApplied(reason) {
+        if (!this.onStateApplied) {
+            return;
+        }
+        try {
+            this.onStateApplied(reason);
+        }
+        catch {
+            // A consumer bug is not Driftpane's problem to propagate.
+        }
+    }
     /** Resolves the preset folder index (number or lazy resolver). */
     resolveManagerIndex() {
         return typeof this.managerChildIndex === 'function'
@@ -303,6 +330,7 @@ export class Driftpane {
         const full = buildSharedImport(preApply, env.s, managerIndex);
         this.pane.importState(full);
         this.pane.refresh();
+        this.notifyStateApplied('share');
         if (!this.presetMenu) {
             // No preset UI to prompt with: best-effort keep the shared config.
             this.presets.acceptSharedImport(env);
@@ -329,6 +357,7 @@ export class Driftpane {
                 // Revert to the pre-open state, drop the param, resume everything.
                 this.pane.importState(preApply);
                 this.pane.refresh();
+                this.notifyStateApplied('share-discard');
                 share.clear();
                 this.persistence.resume();
                 share.resume();

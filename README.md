@@ -2,12 +2,12 @@
 
 # Driftpane
 
-![Driftpane](docs/preview.gif)
+![Driftpane](https://raw.githubusercontent.com/niccolofanton/driftpane/main/docs/preview.gif)
 
 **A non-invasive layer on Tweakpane v4: localStorage persistence, a draggable/resizable panel, persistent folds, a save/apply/export presets menu and shareable config links.**
 
 [![npm version](https://img.shields.io/npm/v/@niccolofanton/driftpane?color=cb3837&logo=npm)](https://www.npmjs.com/package/@niccolofanton/driftpane)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE.txt)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/niccolofanton/driftpane/blob/main/LICENSE.txt)
 [![GitHub stars](https://img.shields.io/github/stars/niccolofanton/driftpane?style=social)](https://github.com/niccolofanton/driftpane/stargazers)
 
 **[Live demo](https://driftpane.niccolofanton.dev)** &nbsp;·&nbsp; **[Usage](#usage) · [Options & API](#options-driftpaneoptions) · [Preset model](#preset-model)**
@@ -207,7 +207,7 @@ panel.clearShareUrl(); // drop the param from the address bar
 ```
 
 The full format (envelope, versioning, reconciliation rules) is specified in
-[`docs/url-share-spec.md`](docs/url-share-spec.md).
+[`docs/url-share-spec.md`](https://github.com/niccolofanton/driftpane/blob/main/docs/url-share-spec.md).
 
 ## Structure
 

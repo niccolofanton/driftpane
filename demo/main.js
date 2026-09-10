@@ -6,10 +6,10 @@
 // expanded/collapsed state including nested sub-panels, persistent drag, presets).
 //
 // IMPORT NOTE: in production this would be `import {Pane} from 'tweakpane'`
-// resolved from the workspace package; here the 'tweakpane' specifier is mapped
-// via an import-map (in the HTML) to the ESM 4.0.5 build on a CDN, so the demo
-// runs without building the monorepo. The Driftpane layer comes from its own
-// local build (./lib/index.js).
+// resolved from the npm package; here the 'tweakpane' specifier is mapped via an
+// import-map (in the HTML) to the ESM 4.0.5 build on a CDN, so the demo runs with
+// no bundler. The Driftpane layer comes from its own local build
+// (./lib/index.js), produced by build.sh from src/.
 import { Pane } from 'tweakpane';
 import { createDriftpane } from './lib/index.js';
 // --- Parameters that drive the canvas preview (showcase persistence) ---

@@ -1,5 +1,5 @@
 {
-	"//": "Build del layer (driftpane/src) in demo/lib come ES module per la demo.",
+	"//": "Builds the library (src/) into demo/lib as ES modules for the demo.",
 	"compilerOptions": {
 		"target": "ES2020",
 		"module": "ESNext",

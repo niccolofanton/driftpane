@@ -140,8 +140,9 @@ export interface DriftpaneOptions {
      */
     defaultPosition?: DriftpanePosition;
     /**
-     * Skin theme (requires `import 'driftpane/theme.css'`): 'auto' follows the
-     * system `prefers-color-scheme` in real time, 'light'/'dark' force it. The
+     * Skin theme (requires `import '@niccolofanton/driftpane/theme.css'`):
+     * 'auto' follows the system `prefers-color-scheme` in real time,
+     * 'light'/'dark' force it. The
      * `data-theme` attribute is set on `pane.element`, so the scope is the panel
      * only. Changeable at runtime from the "Theme" selector in the preset folder,
      * or via `driftpane.theme.set(...)`. Default: 'auto'.
@@ -187,5 +188,30 @@ export interface DriftpaneOptions {
      * `<urlParamKey>:<storageNamespace>` (e.g. `dp:default`). Default: 'dp'.
      */
     urlParamKey?: string;
+    /**
+     * Called after Driftpane has applied a state to the pane, once per apply.
+     *
+     * You normally do NOT need this. Tweakpane's `importState()` writes through
+     * the binding and re-emits `change` for every value that actually differs, so
+     * side effects performed in your `change` handlers already run on restore.
+     *
+     * The hook exists for state your handlers do not own: a flag read once at
+     * init, a value mirrored into your own storage key, or anything not attached
+     * to a binding — none of which Tweakpane can restore for you.
+     *
+     * Called synchronously, after `pane.refresh()`. Exceptions thrown by the
+     * callback are swallowed so a consumer bug cannot break startup.
+     */
+    onStateApplied?: (reason: DriftpaneApplyReason) => void;
 }
+/**
+ * Why `onStateApplied` fired.
+ *
+ * - `restore`        — the persisted state was applied on load.
+ * - `preset`         — a preset was applied (menu or `applyPreset`).
+ * - `share`          — an incoming shared link was applied as a live preview.
+ * - `share-discard`  — a shared preview was rejected and the previous state
+ *                      was put back.
+ */
+export type DriftpaneApplyReason = 'restore' | 'preset' | 'share' | 'share-discard';
 export type { DriftpaneTheme } from './theme-controller.js';

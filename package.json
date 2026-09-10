@@ -57,10 +57,9 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/niccolofanton/driftpane.git",
-		"directory": "driftpane"
+		"url": "git+https://github.com/niccolofanton/driftpane.git"
 	},
-	"homepage": "https://github.com/niccolofanton/driftpane/tree/main/driftpane#readme",
+	"homepage": "https://github.com/niccolofanton/driftpane#readme",
 	"bugs": {
 		"url": "https://github.com/niccolofanton/driftpane/issues"
 	},

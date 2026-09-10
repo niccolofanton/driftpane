@@ -150,8 +150,9 @@ export interface DriftpaneOptions {
 	 */
 	defaultPosition?: DriftpanePosition;
 	/**
-	 * Skin theme (requires `import 'driftpane/theme.css'`): 'auto' follows the
-	 * system `prefers-color-scheme` in real time, 'light'/'dark' force it. The
+	 * Skin theme (requires `import '@niccolofanton/driftpane/theme.css'`):
+	 * 'auto' follows the system `prefers-color-scheme` in real time,
+	 * 'light'/'dark' force it. The
 	 * `data-theme` attribute is set on `pane.element`, so the scope is the panel
 	 * only. Changeable at runtime from the "Theme" selector in the preset folder,
 	 * or via `driftpane.theme.set(...)`. Default: 'auto'.

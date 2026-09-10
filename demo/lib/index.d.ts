@@ -5,4 +5,4 @@ export { PersistenceController } from './persistence.js';
 export { ThemeController } from './theme-controller.js';
 export { UrlShareController } from './url-share.js';
 export type { DriftpaneTheme } from './theme-controller.js';
-export type { DriftpaneOptions, DriftpanePreset, DriftpanePresetStore, DriftpanePosition, DriftpaneShareEnvelope, DriftpaneShareIdentity, SerializedState, } from './types.js';
+export type { DriftpaneApplyReason, DriftpaneOptions, DriftpanePreset, DriftpanePresetStore, DriftpanePosition, DriftpaneShareEnvelope, DriftpaneShareIdentity, SerializedState, } from './types.js';

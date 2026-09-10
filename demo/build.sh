@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build of the Driftpane demo (does NOT require building the monorepo).
+# Build of the Driftpane demo.
 #
 # Compiles:
-#   1) the layer  driftpane/src/*.ts  ->  demo/lib/*.js   (+ .d.ts)
+#   1) the library  src/*.ts           ->  demo/lib/*.js   (+ .d.ts)
 #   2) the entry  demo/main.ts         ->  demo/main.js
 #
 # Tweakpane is NOT compiled: at runtime it is resolved via import-map to a CDN
@@ -10,7 +10,7 @@
 # demo/tweakpane.d.ts.
 #
 # Requirements: tsc (TypeScript) in PATH.
-# Usage:        ./build.sh   (from the driftpane/demo folder)
+# Usage:        ./build.sh   (from anywhere; it cd's to its own folder)
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

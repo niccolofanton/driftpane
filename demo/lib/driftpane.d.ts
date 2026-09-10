@@ -34,6 +34,8 @@ export declare class Driftpane {
     private readonly managerChildIndex;
     /** Host of the height cap (the root panel, = pane.element). */
     private readonly maxHeightHost;
+    /** Consumer hook fired after every state application (see DriftpaneOptions). */
+    private readonly onStateApplied?;
     constructor(pane: PaneLike, opts?: DriftpaneOptions);
     /**
      * Sets the maximum height of the panel at runtime, and persists it. Beyond
@@ -59,6 +61,11 @@ export declare class Driftpane {
      * initial defaults.
      */
     resetState(): void;
+    /**
+     * Fires the consumer hook. Wrapped: a throwing callback must not break
+     * startup, a preset apply, or a share prompt.
+     */
+    private notifyStateApplied;
     /** Resolves the preset folder index (number or lazy resolver). */
     private resolveManagerIndex;
     /**

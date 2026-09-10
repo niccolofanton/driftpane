@@ -1,6 +1,6 @@
 // ESLint config for the standalone `driftpane` package. Self-contained
-// (root: true) so it resolves plugins from driftpane/node_modules and does not
-// inherit the monorepo root config (which targets older eslint/plugin majors).
+// (root: true) so it resolves plugins from this package's node_modules and
+// does not inherit any ancestor config (which may target older plugin majors).
 // Mirrors the repo's house style: prettier + simple-import-sort + TS recommended.
 module.exports = {
 	root: true,

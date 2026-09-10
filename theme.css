@@ -2,7 +2,7 @@
  * Driftpane theme — the "Apple-minimal / frosted glass" skin for the Tweakpane
  * v4 panels managed by Driftpane.
  *
- * USAGE:  import 'driftpane/theme.css';   (or <link> to the file)
+ * USAGE:  import '@niccolofanton/driftpane/theme.css';   (or <link> to the file)
  *
  * - Dark by DEFAULT. Driftpane can set `data-theme` AUTOMATICALLY on the panel
  *   element (light/dark/auto, via an option or from the selector in the presets

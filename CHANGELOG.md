@@ -36,6 +36,15 @@
   not attached to a binding. A throwing callback is swallowed so a consumer bug
   cannot break startup.
 
+### Repository
+
+* **The vendored Tweakpane fork was dropped and the package promoted to the
+  repository root.** Driftpane never patched the Tweakpane core, so the 466
+  vendored files under `packages/` were dead weight; `tweakpane` is consumed
+  purely as a peer dependency now. The published package is unaffected — same
+  name, same entry points, same contents — but paths inside the repo lost their
+  `driftpane/` prefix.
+
 ### Documentation
 
 * **Corrected a false caveat in the README.** It claimed that `importState()`
