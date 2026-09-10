@@ -2,8 +2,8 @@
 // the demo ONLY (the runtime uses the ESM 4.0.5 build resolved via import-map).
 //
 // Covers the public members used by demo/main.ts. In production these types
-// would come from the workspace package (dist/types/index.d.ts); here it is not
-// installed, so we provide a compatible and minimal interface.
+// would come from the 'tweakpane' npm package; the demo keeps its own minimal,
+// self-contained declaration so it type-checks independently of that package.
 
 declare module 'tweakpane' {
 	export interface BindingApi {
