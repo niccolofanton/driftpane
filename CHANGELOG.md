@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0 (2026-09-20)
+
+- Added sidepanel presentation: left/right, hover/push, runtime open/close and
+  width controls, mobile overlay fallback, keyboard focus and layout cleanup.
+- Minimal demo with a three-mode selector, live preview and compact feature disclosures.
+- Docked controls fill the viewport height; hover mode has a keyboard/touch-accessible edge tab.
+- Push layout animates with the panel; docked styling matches the page with rounded edges and subtle depth.
+- CI installs with pnpm to match the migrated lockfile.
+- Top-layer pickers hide when their containing sidepanel closes.
+
 ## 1.3.0 (2026-09-20)
 
 ### Complete playground

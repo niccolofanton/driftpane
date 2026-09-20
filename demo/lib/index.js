@@ -6,4 +6,5 @@ export { DraggableController } from './draggable.js';
 export { PersistenceController } from './persistence.js';
 export { ThemeController } from './theme-controller.js';
 export { UrlShareController } from './url-share.js';
+export { SidepanelController } from './sidepanel.js';
 //# sourceMappingURL=index.js.map

@@ -45,7 +45,7 @@ export class PopupLayer {
             const anchor = popup.parentElement;
             const visible = popup.classList.contains('tp-popv-v') &&
                 anchor &&
-                !anchor.closest('.tp-rotv:not(.tp-rotv-expanded), .tp-fldv:not(.tp-fldv-expanded)') &&
+                !anchor.closest('.tp-rotv:not(.tp-rotv-expanded), .tp-fldv:not(.tp-fldv-expanded), [inert]') &&
                 anchor.getClientRects().length > 0;
             if (!visible) {
                 if (popup.matches(':popover-open'))

@@ -15,7 +15,7 @@
 </div>
 
 A **non-invasive** layer on top of [Tweakpane](https://tweakpane.github.io/) v4
-that adds seven features without modifying the core:
+that adds eight features without modifying the core:
 
 1. **State persistence** — control values and the pane's `expanded` state, saved
    to `localStorage` and restored on reload.
@@ -49,6 +49,9 @@ that adds seven features without modifying the core:
 7. **Shareable config links** — on by default, the live config and active preset
    identity are synchronized to a namespaced query parameter. Incoming links
    preview values with Import / Overwrite / Discard actions.
+
+8. **Sidepanel** — dock left or right in hover or push mode, with open/close,
+   responsive fallback and runtime switching back to floating.
 
 The layer uses **only the `Pane`'s public API**
 for state and controls (`exportState`/`importState`, `children`/`pages`, `element`,
@@ -257,7 +260,7 @@ uses only its public `Pane` API.
 
 The demo (`demo/index.html` + `demo/main.ts`) is a complete interactive playground.
 The original animated wave and control gallery are joined by ten guided areas:
-all seven core features, full backups, the apply hook and an independent panel
+all eight core features, full backups, the apply hook and an independent panel
 with runtime controls. A receiver sandbox exercises Import / Overwrite / Discard
 without replacing the sender's saved state. Desktop and mobile layouts use the
 same package skin and public API.
@@ -414,3 +417,36 @@ same-key bindings with identical labels still require stable ordering.
 ## License
 
 MIT. Tweakpane itself is © [cocopon](https://github.com/cocopon), also MIT.
+
+## Sidepanel
+
+Use a docked panel instead of the default floating panel:
+
+```js
+const drift = createDriftpane(pane, {
+  sidepanel: { mode: 'push', side: 'right', width: 320, open: false },
+});
+openSettingsButton.addEventListener('click', () => drift.sidepanel.open());
+// Also: close(), toggle(), isOpen, setWidth(380).
+drift.setSidepanel({ mode: 'hover', side: 'left' });
+drift.setSidepanel(false); // Return to floating presentation.
+```
+
+There are three presentations: floating (`sidepanel: false`), hover
+(`sidepanel: {mode: 'hover'}`) and push (`sidepanel: {mode: 'push'}`).
+Hover starts closed and reveals the panel from an edge tab without stealing focus;
+leaving the panel closes it after a short delay. The tab also works with keyboard
+and touch. Focused keyboard controls keep it open. Push starts open and reserves
+space using body margins, with an optional `pushTarget` for a custom content container.
+The docked view has its own header and full-height scrolling controls, without the
+floating card's title bar, border, radius or shadow. At viewport widths
+of 600px or less, push becomes overlay. Fixed-position page elements do not move
+with body margins. The panel is non-modal: the page remains interactive. A close
+button and Escape within the panel close it; programmatic opening moves focus
+inside and closing restores the opener. Reduced-motion preferences are respected.
+
+Sidepanel presentation temporarily replaces floating drag/resize and height caps.
+Use `sidepanel.setWidth()` for its width. Values, presets, themes, sharing and popup
+controls keep working. Layout options/open state are not persisted or exported in
+backups. Switching back restores the floating layout; disposing restores page
+margins and the pane's original DOM position. The demo showcases both modes and edges.

@@ -6,6 +6,59 @@
 const STYLE_MARKER = 'data-driftpane';
 /** CSS string of the layer. */
 export const DRIFTPANE_CSS = `
+.driftpane-sidepanel {
+ position: fixed; top: 0; bottom: 0; height: 100dvh;
+ z-index: 2147483000; box-sizing: border-box; display: flex; flex-direction: column;
+ padding: 12px; background-color: inherit; color: inherit; visibility: hidden;
+ isolation: isolate;
+ transition: transform 180ms ease, width 180ms ease, visibility 0s linear 180ms;
+}
+.driftpane-sidepanel[data-side="right"] { right: 0; transform: translateX(100%); }
+.driftpane-sidepanel[data-side="left"] { left: 0; transform: translateX(-100%); }
+.driftpane-sidepanel[data-open="true"] { transform: translateX(0); visibility: visible; transition-delay: 0s; }
+.driftpane-sidepanel::before {
+ content: ''; position: absolute; inset: 12px; z-index: -1; pointer-events: none;
+ border-radius: 22px; background-color: inherit;
+ box-shadow: 0 2px 12px rgb(0 0 0 / 4%), inset 0 0 0 1px color-mix(in srgb, currentColor 7%, transparent);
+}
+.driftpane-sidepanel-header {
+ display: flex; align-items: center; justify-content: space-between;
+ flex: 0 0 56px; padding: 0 18px; font: 600 13px system-ui, sans-serif;
+ border-bottom: 1px solid color-mix(in srgb, currentColor 6%, transparent);
+}
+.driftpane-sidepanel > .tp-rotv {
+ width: 100% !important; height: auto !important; min-height: 0; flex: 1;
+ display: flex !important; flex-direction: column; box-sizing: border-box;
+ border: 0 !important; border-radius: 0 0 22px 22px !important; box-shadow: none !important;
+ overflow: hidden;
+ background: transparent !important; backdrop-filter: none !important;
+ -webkit-backdrop-filter: none !important;
+}
+.driftpane-sidepanel > .tp-rotv > .tp-rotv_b { display: none !important; }
+.driftpane-sidepanel > .tp-rotv > .tp-rotv_c {
+ display: block !important; height: auto !important; max-height: none !important;
+ min-height: 0; flex: 1; overflow-y: auto; visibility: inherit !important;
+ padding: 10px 8px 24px; opacity: 1 !important;
+}
+.driftpane-sidepanel:has([data-theme="dark"]) { color-scheme: dark; }
+.driftpane-sidepanel:has([data-theme="light"]) { color-scheme: light; }
+.driftpane-sidepanel-close {
+ width: 28px; height: 28px; border: 0; border-radius: 4px;
+ background: transparent; color: inherit; font: 22px/1 sans-serif; cursor: pointer;
+}
+.driftpane-sidepanel-trigger {
+ position: fixed; top: 50%; z-index: 2147482999; writing-mode: vertical-rl;
+ padding: 16px 9px; border: 1px solid #8884; background: Canvas; color: CanvasText;
+ font: 500 12px system-ui, sans-serif; letter-spacing: .04em; cursor: pointer;
+ transform: translateY(-50%);
+}
+.driftpane-sidepanel-trigger[data-side="right"] { right: 0; border-radius: 6px 0 0 6px; }
+.driftpane-sidepanel-trigger[data-side="left"] { left: 0; border-radius: 0 6px 6px 0; }
+.driftpane-sidepanel-trigger[hidden] { display: none; }
+.driftpane-sidepanel-close:focus-visible,
+.driftpane-sidepanel-trigger:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
+@media (prefers-reduced-motion: reduce) { .driftpane-sidepanel { transition: none; } }
+
 .driftpane-drag-container {
 	position: fixed;
 	top: 0;

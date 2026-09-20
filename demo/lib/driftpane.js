@@ -24,6 +24,7 @@ import { PersistenceController } from './persistence.js';
 import { PresetMenu } from './preset-menu.js';
 import { PresetController } from './presets.js';
 import { applyMaxHeight, clearMaxHeight, isMaxHeightValue } from './scroll.js';
+import { SidepanelController } from './sidepanel.js';
 import { buildSharedImport, importPaneState, mergeManagerChild, stripManagerChild, stripReadonly, structureSignature, } from './state-scope.js';
 import { DriftpaneStorage } from './storage.js';
 import { injectStyles } from './styles.js';
@@ -65,6 +66,7 @@ const DEFAULTS = {
 const MAXHEIGHT_KEY = 'maxHeight';
 export class Driftpane {
     constructor(pane, opts) {
+        this.sidepanel = null;
         this.disposed = false;
         this.sharePreviewActive = false;
         const options = { ...DEFAULTS, ...(opts ?? {}) };
@@ -187,9 +189,11 @@ export class Driftpane {
         applyMaxHeight(this.maxHeightHost, initialMaxHeight);
         // Measure only after the cap is applied; natural content height can be
         // much taller than the viewport and would incorrectly reset the position.
-        if (this.draggableEnabled) {
+        if (this.draggableEnabled && !options.sidepanel) {
             this.draggable.enable();
         }
+        if (options.sidepanel)
+            this.setSidepanel(options.sidepanel);
         // (g) URL sharing: live-sync the active config into a namespaced query param
         // and reconcile an incoming shared link (preview + prompt). Built LAST so the
         // restore/refresh above never arms lazy sync (the listener is attached now,
@@ -535,6 +539,20 @@ export class Driftpane {
     clearShareUrl() {
         this.urlShare?.clear();
     }
+    /** Switch presentation without recreating bindings or losing values/presets. */
+    setSidepanel(options) {
+        if (this.disposed)
+            return;
+        this.sidepanel?.dispose();
+        this.sidepanel = null;
+        if (options) {
+            this.draggable.disable();
+            this.sidepanel = new SidepanelController(this.pane.element, options);
+        }
+        else if (this.draggableEnabled) {
+            this.draggable.enable();
+        }
+    }
     /** Tears down the manager: removes listeners and added UI. */
     dispose() {
         if (this.disposed) {
@@ -543,6 +561,8 @@ export class Driftpane {
         this.disposed = true;
         this.unsubscribePresets?.();
         this.persistence.dispose();
+        this.sidepanel?.dispose();
+        this.sidepanel = null;
         this.draggable.dispose();
         this.presetMenu?.dispose();
         this.theme.dispose();

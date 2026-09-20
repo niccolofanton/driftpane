@@ -190,6 +190,7 @@ const panel = createDriftpane(pane, {
     storageNamespace: namespace,
     debounceMs: 300,
     width: 304,
+    sidepanel: { mode: 'push', side: 'right', width: 304, open: !narrow },
     maxHeightVh: narrow ? 65 : 75,
     defaultPosition: { x: narrow ? 16 : 24, y: narrow ? 80 : 140 },
     draggable: true,
@@ -267,6 +268,7 @@ $('add-control').addEventListener('click', () => {
 });
 $('secondary-theme').addEventListener('click', () => independent.theme.set(independent.theme.resolved() === 'dark' ? 'light' : 'dark'));
 function show(element) {
+    panel.sidepanel?.open();
     pane.expanded = true;
     // Wait for the actual folder/pane animation before scrolling inside the panel.
     setTimeout(() => element.scrollIntoView({ block: 'nearest', inline: 'nearest' }), 550);
@@ -305,15 +307,41 @@ function shuffle() {
 }
 $('shuffle').addEventListener('click', shuffle);
 $('toggle-panel').addEventListener('click', () => {
-    pane.expanded = !pane.expanded;
+    if (panel.sidepanel) {
+        pane.expanded = true;
+        panel.sidepanel.toggle();
+    }
+    else
+        pane.expanded = !pane.expanded;
 });
+function changePresentation() {
+    const mode = $('panel-presentation').value;
+    const side = $('panel-side').value;
+    panel.setSidepanel(mode === 'floating'
+        ? false
+        : {
+            mode: mode,
+            side,
+            width: Number($('panel-width').value),
+        });
+    pane.expanded = true;
+    document.body.classList.toggle('demo-sidepanel', mode !== 'floating');
+    for (const id of ['drag-toggle', 'reset-position', 'panel-height']) {
+        $(id).disabled = mode !== 'floating';
+    }
+}
+$('panel-presentation').addEventListener('change', changePresentation);
+$('panel-side').addEventListener('change', changePresentation);
+document.body.classList.add('demo-sidepanel');
+for (const id of ['drag-toggle', 'reset-position', 'panel-height'])
+    $(id).disabled = true;
 $('reload').addEventListener('click', () => location.reload());
 $('reset-state').addEventListener('click', () => {
     panel.resetState();
     panel.clearShareUrl();
     location.reload();
 });
-$('panel-width').addEventListener('change', () => panel.draggable.setWidth(Number($('panel-width').value)));
+$('panel-width').addEventListener('change', () => (panel.sidepanel ?? panel.draggable).setWidth(Number($('panel-width').value)));
 $('panel-height').addEventListener('change', () => {
     const value = $('panel-height').value;
     panel.setMaxHeight(value === 'default' ? null : value.endsWith('px') ? value : Number(value));
@@ -473,8 +501,9 @@ function updateStatus() {
     $('active-preset').textContent =
         `${active?.name ?? 'None'}${panel.presets.isModified() ? ' · edited' : ''}`;
     const position = panel.draggable.getPosition();
-    $('layout-status').textContent =
-        `${Math.round(pane.element.getBoundingClientRect().width)}px · ${Math.round(position.x)}, ${Math.round(position.y)}`;
+    $('layout-status').textContent = panel.sidepanel
+        ? `${panel.sidepanel.element.dataset.side} · ${panel.sidepanel.element.dataset.mode} · ${panel.sidepanel.isOpen ? 'open' : 'closed'}`
+        : `${Math.round(pane.element.getBoundingClientRect().width)}px · ${Math.round(position.x)}, ${Math.round(position.y)}`;
     const currentPage = tabs.pages.findIndex((page) => page.selected);
     $('tab-status').textContent = tabNames[currentPage] ?? '—';
     try {

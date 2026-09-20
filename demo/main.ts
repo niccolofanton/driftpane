@@ -196,6 +196,7 @@ const panel = createDriftpane(pane, {
 	storageNamespace: namespace,
 	debounceMs: 300,
 	width: 304,
+	sidepanel: {mode: 'push', side: 'right', width: 304, open: !narrow},
 	maxHeightVh: narrow ? 65 : 75,
 	defaultPosition: {x: narrow ? 16 : 24, y: narrow ? 80 : 140},
 	draggable: true,
@@ -277,6 +278,7 @@ $('secondary-theme').addEventListener('click', () =>
 );
 
 function show(element: HTMLElement): void {
+	panel.sidepanel?.open();
 	pane.expanded = true;
 	// Wait for the actual folder/pane animation before scrolling inside the panel.
 	setTimeout(
@@ -329,8 +331,35 @@ function shuffle(): void {
 }
 $('shuffle').addEventListener('click', shuffle);
 $('toggle-panel').addEventListener('click', () => {
-	pane.expanded = !pane.expanded;
+	if (panel.sidepanel) {
+		pane.expanded = true;
+		panel.sidepanel.toggle();
+	} else pane.expanded = !pane.expanded;
 });
+function changePresentation(): void {
+	const mode = $<HTMLSelectElement>('panel-presentation').value;
+	const side = $<HTMLSelectElement>('panel-side').value as 'left' | 'right';
+	panel.setSidepanel(
+		mode === 'floating'
+			? false
+			: {
+					mode: mode as 'hover' | 'push',
+					side,
+					width: Number($<HTMLSelectElement>('panel-width').value),
+				},
+	);
+	pane.expanded = true;
+	document.body.classList.toggle('demo-sidepanel', mode !== 'floating');
+	for (const id of ['drag-toggle', 'reset-position', 'panel-height']) {
+		$<HTMLButtonElement>(id).disabled = mode !== 'floating';
+	}
+}
+$('panel-presentation').addEventListener('change', changePresentation);
+$('panel-side').addEventListener('change', changePresentation);
+
+document.body.classList.add('demo-sidepanel');
+for (const id of ['drag-toggle', 'reset-position', 'panel-height'])
+	$<HTMLButtonElement>(id).disabled = true;
 $('reload').addEventListener('click', () => location.reload());
 $('reset-state').addEventListener('click', () => {
 	panel.resetState();
@@ -338,7 +367,9 @@ $('reset-state').addEventListener('click', () => {
 	location.reload();
 });
 $('panel-width').addEventListener('change', () =>
-	panel.draggable.setWidth(Number($<HTMLSelectElement>('panel-width').value)),
+	(panel.sidepanel ?? panel.draggable).setWidth(
+		Number($<HTMLSelectElement>('panel-width').value),
+	),
 );
 $('panel-height').addEventListener('change', () => {
 	const value = $<HTMLSelectElement>('panel-height').value;
@@ -515,8 +546,9 @@ function updateStatus(): void {
 	$('active-preset').textContent =
 		`${active?.name ?? 'None'}${panel.presets.isModified() ? ' · edited' : ''}`;
 	const position = panel.draggable.getPosition();
-	$('layout-status').textContent =
-		`${Math.round(pane.element.getBoundingClientRect().width)}px · ${Math.round(position.x)}, ${Math.round(position.y)}`;
+	$('layout-status').textContent = panel.sidepanel
+		? `${panel.sidepanel.element.dataset.side} · ${panel.sidepanel.element.dataset.mode} · ${panel.sidepanel.isOpen ? 'open' : 'closed'}`
+		: `${Math.round(pane.element.getBoundingClientRect().width)}px · ${Math.round(position.x)}, ${Math.round(position.y)}`;
 	const currentPage = tabs.pages.findIndex((page) => page.selected);
 	$('tab-status').textContent = tabNames[currentPage] ?? '—';
 	try {

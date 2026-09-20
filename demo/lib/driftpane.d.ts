@@ -1,6 +1,8 @@
 import { DraggableController } from './draggable.js';
 import { PresetController } from './presets.js';
+import { SidepanelController } from './sidepanel.js';
 import { ThemeController } from './theme-controller.js';
+import type { DriftpaneSidepanelOptions } from './types.js';
 import { DriftpaneOptions } from './types.js';
 /**
  * Structural type of the Pane required by the facade. Uses only public members
@@ -23,6 +25,7 @@ export declare class Driftpane {
     readonly draggable: DraggableController;
     /** Theme controller (programmatic API: theme.set('dark'), etc.). */
     readonly theme: ThemeController;
+    sidepanel: SidepanelController | null;
     private readonly storage;
     private readonly persistence;
     private readonly presetMenu;
@@ -94,6 +97,8 @@ export declare class Driftpane {
     copyShareLink(): Promise<string>;
     /** Removes the share param from the URL (the "stop sharing" affordance). */
     clearShareUrl(): void;
+    /** Switch presentation without recreating bindings or losing values/presets. */
+    setSidepanel(options: false | DriftpaneSidepanelOptions): void;
     /** Tears down the manager: removes listeners and added UI. */
     dispose(): void;
 }

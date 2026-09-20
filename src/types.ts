@@ -94,7 +94,24 @@ export interface DriftpaneShareIdentity {
  * Manager configuration options. All fields are optional: the defaults are
  * applied by the `Driftpane` facade.
  */
+export interface DriftpaneSidepanelOptions {
+	/** Hover reveals from an edge tab; push reserves horizontal space. Default: hover. */
+	mode?: 'hover' | 'push';
+	/** Dock edge. Default: right. */
+	side?: 'left' | 'right';
+	/** Preferred width in CSS pixels, clamped to the viewport. Default: 320. */
+	width?: number;
+	/** Initially visible. Default: false for hover, true for push. */
+	open?: boolean;
+	/** Content element to compress in push mode. Default: document.body. */
+	pushTarget?: HTMLElement;
+	/** Accessible name for the panel. Default: Settings. */
+	label?: string;
+}
+
 export interface DriftpaneOptions {
+	/** Dock instead of floating. Push falls back to overlay at <=600px. */
+	sidepanel?: false | DriftpaneSidepanelOptions;
 	/**
 	 * Namespace for the localStorage keys, so that multiple independent panels can
 	 * coexist on the same origin. Default: 'default'.
@@ -228,10 +245,7 @@ export interface DriftpaneOptions {
  *                      was put back.
  */
 export type DriftpaneApplyReason =
-	| 'restore'
-	| 'preset'
-	| 'share'
-	| 'share-discard';
+	'restore' | 'preset' | 'share' | 'share-discard';
 
 // We re-export the theme type so it is reachable from the public barrel together
 // with the other options, without consumers having to know theme-controller.

@@ -3,7 +3,9 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>Driftpane — Tweakpane v4 persistence, presets & drag panel</title>
+		<title>
+			Driftpane — Tweakpane v4 persistence, presets &amp; drag panel
+		</title>
 		<meta
 			name="description"
 			content="Driftpane is a non-invasive layer on Tweakpane v4: localStorage state persistence, a draggable resizable panel, persistent folds, presets and shareable links."
@@ -20,7 +22,7 @@
 		<meta property="og:site_name" content="Niccolò Fanton" />
 		<meta
 			property="og:title"
-			content="Driftpane — Tweakpane v4 persistence, presets & drag panel"
+			content="Driftpane — Tweakpane v4 persistence, presets &amp; drag panel"
 		/>
 		<meta
 			property="og:description"
@@ -42,7 +44,7 @@
 		<meta name="twitter:card" content="summary_large_image" />
 		<meta
 			name="twitter:title"
-			content="Driftpane — Tweakpane v4 persistence, presets & drag panel"
+			content="Driftpane — Tweakpane v4 persistence, presets &amp; drag panel"
 		/>
 		<meta
 			name="twitter:description"
@@ -66,7 +68,7 @@
 				"applicationCategory": "DeveloperApplication",
 				"applicationSubCategory": "JavaScript library",
 				"operatingSystem": "Web browser",
-				"softwareVersion": "1.3.0",
+				"softwareVersion": "1.4.0",
 				"programmingLanguage": "TypeScript",
 				"license": "https://opensource.org/licenses/MIT",
 				"description": "A non-invasive layer on top of Tweakpane v4 that adds localStorage state persistence, a draggable and resizable panel, persistent fold state for the pane and every nested folder, a presets menu (save, apply, rename, export and import JSON), a light/dark/auto skin theme and shareable config links.",
@@ -110,9 +112,9 @@
 
 		<!-- Geist family (Vercel): sans (thin->bold) + mono, for ALL text. -->
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
 		<link
-			href="https://fonts.googleapis.com/css2?family=Geist:wght@100;200;300;400;500;600;700;800;900&family=Geist+Mono:wght@300;400;500;600&display=swap"
+			href="https://fonts.googleapis.com/css2?family=Geist:wght@100;200;300;400;500;600;700;800;900&amp;family=Geist+Mono:wght@300;400;500;600&amp;display=swap"
 			rel="stylesheet"
 		/>
 
@@ -122,10 +124,31 @@
 	<body>
 		<header class="topbar">
 			<a class="wordmark" href="./"
-				>◒ <span>Driftpane</span><span class="tag">PLAYGROUND</span></a
+				>◒ <span>Driftpane</span><span class="tag">DEMO</span></a
 			>
+			<div class="presentation-controls">
+				<label
+					>Presentation<select id="panel-presentation">
+						<option value="floating">Floating</option>
+						<option value="hover">Sidepanel · hover</option>
+						<option value="push" selected="">Sidepanel · push</option>
+					</select></label
+				><label
+					>Side<select id="panel-side">
+						<option value="right">Right</option>
+						<option value="left">Left</option>
+					</select></label
+				><label
+					>Width<select id="panel-width">
+						<option value="240">Compact · 240px</option>
+						<option value="304" selected="">Comfort · 304px</option>
+						<option value="420">Wide · 420px</option>
+						<option value="600">Maximum · 600px</option>
+					</select></label
+				>
+			</div>
 			<nav aria-label="Main navigation">
-				<button id="toggle-panel" class="quiet">Toggle panel</button>
+				<button id="toggle-panel" class="quiet">Toggle controls</button>
 				<a
 					href="https://github.com/niccolofanton/driftpane"
 					target="_blank"
@@ -141,30 +164,18 @@
 				>
 			</nav>
 		</header>
-		<aside class="panel-caption">
-			<span class="live-dot"></span> YOUR LIVE PANEL
-			<span>Drag · resize · make it yours</span>
-		</aside>
+
 		<div id="main-panel"></div>
 		<main class="workspace">
-			<div id="receiver-banner" class="notice" hidden>
+			<div id="receiver-banner" class="notice" hidden="">
 				This is the receiver sandbox. Its saved state is separate from the
 				sender. Resolve the shared preset in the live panel, then reopen a
 				sender link to try Overwrite.
 			</div>
 			<section class="hero" aria-labelledby="hero-title">
-				<p class="eyebrow">TWEAKPANE, WITH A MEMORY</p>
-				<h1 id="hero-title">Small panel.<br /><span>Long memory.</span></h1>
-				<p class="intro">
-					Shape a signal. Save a variation. Send it somewhere.<br
-						class="desktop-break"
-					/>
-					Every custom Driftpane feature is live here.
-				</p>
-				<div class="hero-meta">
-					<span>7 core features</span><span>No core modifications</span
-					><span id="namespace-label"></span>
-				</div>
+				<h1 id="hero-title">Play with the signal.</h1>
+				<p>Three layouts. The same controls.</p>
+				<span id="namespace-label" class="sr-only"></span>
 			</section>
 			<section class="signal" aria-label="Interactive signal preview">
 				<div class="signal-top">
@@ -189,249 +200,159 @@
 				</div>
 				<div><span>PANEL</span><strong id="layout-status">—</strong></div>
 			</div>
-			<div class="section-heading">
-				<h2>Take it for a spin.</h2>
-				<span>Real controls. Real saved state.</span>
-			</div>
+
 			<div class="feature-grid">
-				<section class="feature" id="persistence-feature">
-					<div class="feature-heading">
-						<span class="index">01</span>
-						<h3>Pick up where you left off.</h3>
-						<span class="pill">Persistence</span>
-					</div>
-					<p>
-						Edit the signal, then reload. Values return automatically. The live
-						FPS monitor keeps running while your edits save.
-					</p>
-					<div class="readout">
-						<span>Saved signal speed</span
-						><strong id="saved-speed">No snapshot yet</strong>
-					</div>
-					<div class="actions">
-						<button id="reload">Reload & restore</button
-						><button id="reset-state" class="quiet">
-							Clear saved values & reload
-						</button>
-					</div>
-					<p class="footnote">
-						Clearing values keeps your presets, theme and panel layout.
-					</p>
-				</section>
-				<section class="feature" id="layout-feature">
-					<div class="feature-heading">
-						<span class="index">02</span>
-						<h3>A panel that fits.</h3>
-						<span class="pill">Drag & resize</span>
-					</div>
-					<p>
-						Drag the title bar. Resize the right edge, bottom edge or corner.
-						Position and size survive a reload and adapt to the viewport.
-					</p>
-					<div class="fields">
-						<label
-							>Width<select id="panel-width">
-								<option value="240">Compact · 240px</option>
-								<option value="304" selected>Comfort · 304px</option>
-								<option value="420">Wide · 420px</option>
-								<option value="600">Maximum · 600px</option>
-							</select></label
-						><label
-							>Height cap<select id="panel-height">
-								<option value="default">Default safe zone</option>
-								<option value="45">Compact · 45vh</option>
-								<option value="75" selected>Roomy · 75vh</option>
-								<option value="650px">Fixed · 650px</option>
-							</select></label
-						>
-					</div>
-					<div class="actions">
-						<button id="reset-position">Reset position</button
-						><button id="drag-toggle" class="quiet" aria-pressed="true">
-							Dragging on
-						</button>
-					</div>
-				</section>
-				<section class="feature" id="navigation-feature">
-					<div class="feature-heading">
-						<span class="index">03</span>
-						<h3>Keep your place.</h3>
-						<span class="pill">Folders & tabs</span>
-					</div>
-					<p>
-						Open nested folders or switch a gallery tab, then reload. Navigation
-						stays local even when you apply a preset or shared link.
-					</p>
-					<div class="readout">
-						<span>Gallery page</span><strong id="tab-status">Numbers</strong>
-					</div>
-					<div class="actions">
-						<button id="nested-folds">Open nested folders</button
-						><button id="next-tab">Next gallery tab →</button>
-					</div>
-				</section>
-				<section class="feature" id="presets-feature">
-					<div class="feature-heading">
-						<span class="index">04</span>
-						<h3>Keep the good takes.</h3>
-						<span class="pill">Presets</span>
-					</div>
-					<p>
-						Save a signal, edit it, then Restore. The panel menu also lets you
-						overwrite, rename, delete, export or import a preset. Default stays
-						protected.
-					</p>
-					<label class="inline-field"
-						>Name<input id="preset-name" value="My signal" maxlength="100"
-					/></label>
-					<div class="actions">
-						<button id="save-preset">Save as new</button
-						><button id="restore-preset">Restore active</button
-						><button id="show-presets" class="quiet">Show menu ↗</button>
-					</div>
-				</section>
-				<section class="feature" id="theme-feature">
-					<div class="feature-heading">
-						<span class="index">05</span>
-						<h3>Light, dark, or your call.</h3>
-						<span class="pill">Theme</span>
-					</div>
-					<p>
-						The skin follows your system in Auto. These buttons use the theme
-						API; the selector in the panel stays in sync.
-					</p>
-					<div class="segmented" role="group" aria-label="Panel theme">
-						<button data-theme-choice="auto" aria-pressed="true">Auto</button
-						><button data-theme-choice="light" aria-pressed="false">
-							Light</button
-						><button data-theme-choice="dark" aria-pressed="false">Dark</button>
-					</div>
-					<div class="readout">
-						<span>Resolved theme</span><strong id="theme-status">—</strong>
-					</div>
-				</section>
-				<section class="feature" id="scroll-feature">
-					<div class="feature-heading">
-						<span class="index">06</span>
-						<h3>More controls. Less space.</h3>
-						<span class="pill">Scroll & popups</span>
-					</div>
-					<p>
-						Try a compact panel. Color and point pickers remain usable outside
-						the scrolling content; the title bar stays in place.
-					</p>
-					<div class="actions">
-						<button id="open-color">Try color picker</button
-						><button id="open-point">Try point picker</button
-						><button id="default-height" class="quiet">
-							Restore height cap
-						</button>
-					</div>
-					<p class="footnote">
-						The gallery includes sliders, text, colors, vectors and live
-						readonly monitors.
-					</p>
-				</section>
-				<section class="feature wide" id="share-feature">
-					<div class="feature-heading">
-						<span class="index">07</span>
-						<h3>Send the whole idea.</h3>
-						<span class="pill">URL sharing</span>
-					</div>
-					<p>
-						Edits and preset identity update the URL automatically. Open a
-						receiver sandbox to try the live preview and Import / Overwrite /
-						Discard flow, without replacing the sender's saved state.
-					</p>
-					<label class="sr-only" for="share-link"
-						>Shareable configuration link</label
-					><textarea
-						id="share-link"
-						rows="2"
-						readonly
-						placeholder="Change a value, or build a link below."
-					></textarea>
-					<div class="actions">
-						<button id="build-link">Build link</button
-						><button id="copy-link">Copy link</button
-						><button id="open-receiver">Open receiver ↗</button
-						><button id="clear-link" class="quiet">Clear URL</button>
-					</div>
-					<p class="footnote">
-						Values and preset identity travel. Theme, position, size, folders
-						and tabs stay local. A new edit starts URL sync again after Clear.
-					</p>
-				</section>
-				<section class="feature" id="backup-feature">
-					<div class="feature-heading">
-						<span class="index">+</span>
-						<h3>A little insurance.</h3>
-						<span class="pill">Full backup</span>
-					</div>
-					<p>
-						Export values, navigation, layout, theme and every preset in one
-						file. Change a few things, then import it to restore this panel.
-					</p>
-					<div class="actions">
-						<button id="export-backup">Export full backup ↓</button
-						><button id="import-backup">Import backup ↑</button
-						><input
-							type="file"
-							id="backup-file"
-							accept="application/json,.json"
-							hidden
-						/>
-					</div>
-					<p class="footnote">
-						Backup import replaces the custom preset collection; your factory
-						Default remains. Single preset JSON uses the panel's Import button.
-					</p>
-				</section>
-				<section class="feature" id="hooks-feature">
-					<div class="feature-heading">
-						<span class="index">+</span>
-						<h3>See what was applied.</h3>
-						<span class="pill">Apply hook</span>
-					</div>
-					<p>
-						Restore, presets and share decisions call
-						<code>onStateApplied</code>. This feed shows those callbacks, while
-						binding changes drive the signal.
-					</p>
-					<ol id="event-log" class="event-log">
-						<li class="empty">
-							Apply a preset or open a shared link to see a callback.
-						</li>
-					</ol>
-				</section>
-				<section class="feature wide" id="isolation-feature">
-					<div class="feature-heading">
-						<span class="index">+</span>
-						<h3>Two panels. Separate lives.</h3>
-						<span class="pill">Namespaces & options</span>
-					</div>
-					<div class="isolation-grid">
-						<div>
-							<p>
-								This second panel has its own saved state and theme. Presets,
-								URL sync, dragging and resize handles are off. Its accent draws
-								the secondary signal.
-							</p>
-							<div class="actions">
-								<button id="secondary-theme">Switch its theme</button
-								><button id="add-control">Add runtime controls</button>
-							</div>
-							<p class="footnote">
-								Runtime folders and their values persist too. Reload to verify
-								both namespaces independently.
-							</p>
+				<details id="persistence-feature" class="feature">
+					<summary>Persistence</summary>
+					<div class="feature-content">
+						<div class="readout">
+							<span>Saved signal speed</span
+							><strong id="saved-speed">No snapshot yet</strong>
 						</div>
-						<div id="secondary-panel" class="secondary-panel"></div>
+						<div class="actions">
+							<button id="reload">Reload &amp; restore</button
+							><button id="reset-state" class="quiet">
+								Clear saved values &amp; reload
+							</button>
+						</div>
 					</div>
-				</section>
+				</details>
+				<details id="layout-feature" class="feature">
+					<summary>Drag &amp; resize</summary>
+					<div class="feature-content">
+						<div class="fields">
+							<label
+								>Height cap<select id="panel-height">
+									<option value="default">Default safe zone</option>
+									<option value="45">Compact · 45vh</option>
+									<option value="75" selected="">Roomy · 75vh</option>
+									<option value="650px">Fixed · 650px</option>
+								</select></label
+							>
+						</div>
+						<div class="actions">
+							<button id="reset-position">Reset position</button
+							><button id="drag-toggle" class="quiet" aria-pressed="true">
+								Dragging on
+							</button>
+						</div>
+					</div>
+				</details>
+				<details id="navigation-feature" class="feature">
+					<summary>Folders &amp; tabs</summary>
+					<div class="feature-content">
+						<div class="readout">
+							<span>Gallery page</span><strong id="tab-status">Numbers</strong>
+						</div>
+						<div class="actions">
+							<button id="nested-folds">Open nested folders</button
+							><button id="next-tab">Next gallery tab →</button>
+						</div>
+					</div>
+				</details>
+				<details id="presets-feature" class="feature">
+					<summary>Presets</summary>
+					<div class="feature-content">
+						<label class="inline-field"
+							>Name<input id="preset-name" value="My signal" maxlength="100"
+						/></label>
+						<div class="actions">
+							<button id="save-preset">Save as new</button
+							><button id="restore-preset">Restore active</button
+							><button id="show-presets" class="quiet">Show menu ↗</button>
+						</div>
+					</div>
+				</details>
+				<details id="theme-feature" class="feature">
+					<summary>Theme</summary>
+					<div class="feature-content">
+						<div class="segmented" role="group" aria-label="Panel theme">
+							<button data-theme-choice="auto" aria-pressed="true">Auto</button
+							><button data-theme-choice="light" aria-pressed="false">
+								Light</button
+							><button data-theme-choice="dark" aria-pressed="false">
+								Dark
+							</button>
+						</div>
+						<div class="readout">
+							<span>Resolved theme</span><strong id="theme-status">—</strong>
+						</div>
+					</div>
+				</details>
+				<details id="scroll-feature" class="feature">
+					<summary>Scroll &amp; popups</summary>
+					<div class="feature-content">
+						<div class="actions">
+							<button id="open-color">Try color picker</button
+							><button id="open-point">Try point picker</button
+							><button id="default-height" class="quiet">
+								Restore height cap
+							</button>
+						</div>
+					</div>
+				</details>
+				<details id="share-feature" class="feature">
+					<summary>URL sharing</summary>
+					<div class="feature-content">
+						<label class="sr-only" for="share-link"
+							>Shareable configuration link</label
+						><textarea
+							id="share-link"
+							rows="2"
+							readonly=""
+							placeholder="Change a value, or build a link below."
+						></textarea>
+						<div class="actions">
+							<button id="build-link">Build link</button
+							><button id="copy-link">Copy link</button
+							><button id="open-receiver">Open receiver ↗</button
+							><button id="clear-link" class="quiet">Clear URL</button>
+						</div>
+					</div>
+				</details>
+
+				<details id="backup-feature" class="feature">
+					<summary>Full backup</summary>
+					<div class="feature-content">
+						<div class="actions">
+							<button id="export-backup">Export full backup ↓</button
+							><button id="import-backup">Import backup ↑</button
+							><input
+								type="file"
+								id="backup-file"
+								accept="application/json,.json"
+								hidden=""
+							/>
+						</div>
+					</div>
+				</details>
+				<details id="hooks-feature" class="feature">
+					<summary>Apply hook</summary>
+					<div class="feature-content">
+						<ol id="event-log" class="event-log">
+							<li class="empty">
+								Apply a preset or open a shared link to see a callback.
+							</li>
+						</ol>
+					</div>
+				</details>
+				<details id="isolation-feature" class="feature">
+					<summary>Namespaces &amp; options</summary>
+					<div class="feature-content">
+						<div class="isolation-grid">
+							<div>
+								<div class="actions">
+									<button id="secondary-theme">Switch its theme</button
+									><button id="add-control">Add runtime controls</button>
+								</div>
+							</div>
+							<div id="secondary-panel" class="secondary-panel"></div>
+						</div>
+					</div>
+				</details>
 			</div>
 			<footer>
-				<span>Built on Tweakpane v4. Made to stay out of your way.</span
+				<span>Tweakpane, extended.</span
 				><a href="https://github.com/niccolofanton/driftpane#readme"
 					>Documentation ↗</a
 				>
@@ -442,7 +363,7 @@
 			class="demo-notice"
 			role="status"
 			aria-live="polite"
-			hidden
+			hidden=""
 		></div>
 		<noscript
 			><p class="notice">

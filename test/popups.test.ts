@@ -80,6 +80,19 @@ describe('popup layer lifecycle', () => {
 		);
 	}
 
+	it('hides top-layer pickers when the sidepanel becomes inert', () => {
+		withPopover();
+		popup.classList.add('tp-popv-v');
+		layer = new PopupLayer(host);
+		expect(open).toBe(true);
+		const sidepanel = document.createElement('aside');
+		host.before(sidepanel);
+		sidepanel.append(host);
+		sidepanel.setAttribute('inert', '');
+		host.dispatchEvent(new Event('driftpane-layout'));
+		expect(open).toBe(false);
+	});
+
 	it('keeps the existing DOM and focus handlers while opening, closing and reopening', async () => {
 		withPopover();
 		const input = document.createElement('input');

@@ -6,3 +6,5 @@ export { ThemeController } from './theme-controller.js';
 export { UrlShareController } from './url-share.js';
 export type { DriftpaneTheme } from './theme-controller.js';
 export type { DriftpaneApplyReason, DriftpaneOptions, DriftpanePreset, DriftpanePresetStore, DriftpanePosition, DriftpaneShareEnvelope, DriftpaneShareIdentity, SerializedState, } from './types.js';
+export { SidepanelController } from './sidepanel.js';
+export type { DriftpaneSidepanelOptions } from './types.js';

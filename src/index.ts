@@ -19,3 +19,6 @@ export type {
 	DriftpaneShareIdentity,
 	SerializedState,
 } from './types.js';
+
+export {SidepanelController} from './sidepanel.js';
+export type {DriftpaneSidepanelOptions} from './types.js';
