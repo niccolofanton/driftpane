@@ -7,6 +7,7 @@
 
 declare module 'tweakpane' {
 	export interface BindingApi {
+		readonly element: HTMLElement;
 		on(event: 'change', handler: (ev: {value: unknown}) => void): BindingApi;
 	}
 
@@ -32,14 +33,17 @@ declare module 'tweakpane' {
 	}
 
 	export interface FolderApi extends ContainerApi {
+		readonly element: HTMLElement;
+		title: string;
 		expanded: boolean;
 	}
 
 	export interface TabPageApi extends ContainerApi {
-		readonly selected: boolean;
+		selected: boolean;
 	}
 
 	export interface TabApi {
+		readonly element: HTMLElement;
 		readonly pages: TabPageApi[];
 	}
 
@@ -51,6 +55,13 @@ declare module 'tweakpane' {
 
 	export class Pane implements ContainerApi {
 		constructor(config?: PaneConfig);
+		expanded: boolean;
+		readonly children: Array<{
+			element: HTMLElement;
+			title?: string;
+			expanded?: boolean;
+		}>;
+		dispose(): void;
 		readonly element: HTMLElement;
 		addBinding(
 			object: object,

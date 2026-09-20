@@ -19,7 +19,7 @@
 // called after building the pane, "at the bottom" = after all the user's controls.
 
 import {PresetController} from './presets.js';
-import {DriftpanePreset} from './types.js';
+import {DriftpanePreset, SerializedState} from './types.js';
 
 /** Tweakpane button (minimal) with element access for icons/layout. */
 export interface ButtonLike {
@@ -47,6 +47,8 @@ export interface FolderLike {
 export interface PaneLike {
 	addBlade(params: Record<string, unknown>): unknown;
 	element: HTMLElement;
+	children?: readonly unknown[];
+	exportState?(): SerializedState;
 }
 
 /**
@@ -56,6 +58,7 @@ export interface PaneLike {
 export interface ThemeControllerLike {
 	get(): 'auto' | 'light' | 'dark';
 	set(theme: 'auto' | 'light' | 'dark'): void;
+	subscribe?(listener: () => void): () => void;
 }
 
 export interface PresetMenuOptions {
@@ -77,6 +80,8 @@ export interface PresetMenuOptions {
 	 * JSON content of a full namespace backup. When absent, the button is hidden.
 	 */
 	onExportAll?: () => {filename: string; content: string};
+	/** Restore an entire namespace backup rather than importing it as a preset. */
+	onImportBackup?: (raw: string) => void;
 	/**
 	 * Optional callback for the "Copy link" button (URL sharing). When absent, the
 	 * button is hidden. Typically builds + copies the share URL.
@@ -100,8 +105,13 @@ export class PresetMenu {
 		dispose(): void;
 	} | null = null;
 	private fileInput: HTMLInputElement | null = null;
+	private fileReader: FileReader | null = null;
+	private disposed = false;
 	/** True while refreshList() writes the selector value programmatically. */
 	private syncingList = false;
+	private unsubscribePresets: (() => void) | null = null;
+	private unsubscribeTheme: (() => void) | null = null;
+	private managerIndexAtMount = -1;
 
 	// Buttons whose disabled state depends on the active preset.
 	private saveChangesBtn: ButtonLike | null = null;
@@ -126,12 +136,17 @@ export class PresetMenu {
 	 * @returns the created FolderLike.
 	 */
 	public mount(): FolderLike {
+		this.disposed = false;
 		// No `index`: the core appends the folder at the end -> last child.
 		const folder = this.pane.addBlade({
 			view: 'folder',
 			title: this.opts.folderTitle,
 		}) as FolderLike;
 		this.folder = folder;
+		const exportedChildren = this.pane.exportState?.()['children'];
+		this.managerIndexAtMount = Array.isArray(exportedChildren)
+			? exportedChildren.length - 1
+			: -1;
 
 		// THEME selector (optional): as the FIRST entry, before the preset selector.
 		if (this.opts.themeController) {
@@ -146,7 +161,18 @@ export class PresetMenu {
 				],
 				value: themeController.get(),
 			});
+			let syncingTheme = false;
+			this.unsubscribeTheme =
+				themeController.subscribe?.(() => {
+					syncingTheme = true;
+					try {
+						themeBlade.value = themeController.get();
+					} finally {
+						syncingTheme = false;
+					}
+				}) ?? null;
 			themeBlade.on('change', (ev) => {
+				if (syncingTheme) return;
 				const value = ev.value;
 				if (value === 'auto' || value === 'light' || value === 'dark') {
 					themeController.set(value);
@@ -173,9 +199,9 @@ export class PresetMenu {
 				if (ok) {
 					this.opts.onAfterApply();
 				}
-				// The active preset has changed: realign the dependent buttons
-				// (Save changes / Delete disabled on the Default, etc.).
-				this.updateButtonStates();
+				// Failed imports retain the previous active preset: reflect that in
+				// the selector so subsequent actions target the visible selection.
+				this.refreshList();
 			}
 		});
 
@@ -248,8 +274,25 @@ export class PresetMenu {
 		// Hidden file input for file-based import.
 		this.fileInput = this.createFileInput();
 
+		this.unsubscribePresets = this.presets.subscribe(() => this.refreshList());
 		this.updateButtonStates();
 		return folder;
+	}
+
+	/** Locate the actual mounted manager even after consumers add more controls. */
+	public getManagerIndex(): number {
+		if (!this.folder) return -1;
+		const children = this.pane.children;
+		if (!children) return this.managerIndexAtMount;
+		const index = children.indexOf(this.folder);
+		if (index < 0) return -1;
+		const exportedChildren = this.pane.exportState?.()['children'];
+		// Lightweight adapters may expose folders only; full Tweakpane APIs have
+		// equal child counts and therefore need no offset.
+		const offset = Array.isArray(exportedChildren)
+			? Math.max(0, exportedChildren.length - children.length)
+			: 0;
+		return index + offset;
 	}
 
 	/**
@@ -430,6 +473,12 @@ export class PresetMenu {
 
 	/** Unmounts the menu and removes the hidden file input. */
 	public dispose(): void {
+		this.disposed = true;
+		this.cancelFileRead();
+		this.unsubscribePresets?.();
+		this.unsubscribePresets = null;
+		this.unsubscribeTheme?.();
+		this.unsubscribeTheme = null;
 		this.clearSharePrompt();
 		if (this.fileInput && this.fileInput.parentNode) {
 			this.fileInput.parentNode.removeChild(this.fileInput);
@@ -543,10 +592,11 @@ export class PresetMenu {
 			return;
 		}
 		if (this.presets.removeActive()) {
-			// After deletion the active preset changes: realign the list and any
-			// applied state.
+			const successor = this.presets.activeId();
+			if (successor && this.presets.apply(successor)) {
+				this.opts.onAfterApply();
+			}
 			this.refreshList();
-			this.opts.onAfterApply();
 			this.notify(`Preset "${name}" deleted.`);
 		}
 	}
@@ -667,18 +717,34 @@ export class PresetMenu {
 			if (!file) {
 				return;
 			}
+			if (this.disposed) return;
+			this.cancelFileRead();
 			const reader = new FileReader();
+			this.fileReader = reader;
 			reader.onload = () => {
+				if (this.disposed || this.fileReader !== reader) return;
+				this.fileReader = null;
 				const raw = String(reader.result ?? '');
 				this.applyImport(raw);
 			};
 			reader.onerror = () => {
+				if (this.disposed || this.fileReader !== reader) return;
+				this.fileReader = null;
 				this.notify('Error reading the file.');
 			};
 			reader.readAsText(file);
 		});
 		doc.body.appendChild(input);
 		return input;
+	}
+
+	private cancelFileRead(): void {
+		const reader = this.fileReader;
+		this.fileReader = null;
+		if (!reader) return;
+		reader.onload = null;
+		reader.onerror = null;
+		if (reader.readyState === 1) reader.abort();
 	}
 
 	private importFromPrompt(): void {
@@ -693,6 +759,18 @@ export class PresetMenu {
 
 	private applyImport(raw: string): void {
 		try {
+			const parsed: unknown = JSON.parse(raw);
+			if (
+				parsed &&
+				typeof parsed === 'object' &&
+				(parsed as {format?: unknown}).format === 'driftpane-backup' &&
+				this.opts.onImportBackup
+			) {
+				this.opts.onImportBackup(raw);
+				this.refreshList();
+				this.notify('Backup restored.');
+				return;
+			}
 			const {imported, ids} = this.presets.importJSON(raw);
 			if (imported > 0 && ids.length > 0) {
 				// Apply and select the first imported preset IMMEDIATELY: this way

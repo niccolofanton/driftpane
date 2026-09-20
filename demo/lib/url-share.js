@@ -22,10 +22,21 @@ const SUPPORTED_VERSION = 1;
  */
 const URL_LENGTH_THRESHOLD = 2000;
 export class UrlShareController {
+    /** Preset CRUD can change identity without emitting a binding change. */
+    syncIdentity() {
+        this.onChange();
+    }
     constructor(pane, opts) {
         this.suspended = false;
         this.disposed = false;
         this.attached = false;
+        this.pendingWrite = false;
+        /** Latest encode that may still publish, separate from a queued debounce. */
+        this.encodingSeq = null;
+        /** Explicit callers superseded by another encode wait for its actual URL. */
+        this.latestWrite = null;
+        /** Incoming decodes can be cancelled independently of outgoing writes. */
+        this.readSeq = 0;
         /** Monotonic write token; async encodes that are no longer the latest are dropped. */
         this.writeSeq = 0;
         this.warnedLong = false;
@@ -49,11 +60,13 @@ export class UrlShareController {
                 return;
             }
             this.lastSnapshot = snap;
+            this.pendingWrite = true;
             this.debouncedWrite();
         };
         this.pane = pane;
         this.opts = opts;
         this.debouncedWrite = debounce(() => {
+            this.pendingWrite = false;
             void this.writeNow();
         }, opts.debounceMs);
     }
@@ -75,7 +88,7 @@ export class UrlShareController {
     /** JSON of the current snapshot, or null if it cannot be produced. */
     snapshotJson() {
         try {
-            return JSON.stringify(this.opts.getSnapshot());
+            return JSON.stringify([this.opts.getIdentity(), this.opts.getSnapshot()]);
         }
         catch {
             return null;
@@ -83,12 +96,21 @@ export class UrlShareController {
     }
     /** Pauses change-driven writes (used during the incoming-share preview). */
     suspend() {
+        // A fired debounce can still be encoding. Preserve its write intent before
+        // invalidating the result, so a rollback/resume retries the current state.
+        this.pendingWrite || (this.pendingWrite = this.encodingSeq !== null);
+        this.encodingSeq = null;
+        this.latestWrite = null;
         this.suspended = true;
         this.debouncedWrite.cancel();
+        this.writeSeq += 1;
     }
     /** Resumes change-driven writes. */
     resume() {
         this.suspended = false;
+        if (this.pendingWrite && !this.disposed) {
+            this.debouncedWrite();
+        }
     }
     /** True if the current URL already carries our param (sync). */
     hasIncomingParam() {
@@ -100,7 +122,18 @@ export class UrlShareController {
      * this one is dropped. No-op (returns the current href) when there is no
      * identity to stamp or no window.
      */
-    async writeNow() {
+    writeNow() {
+        if (this.disposed) {
+            return Promise.resolve(this.currentHref());
+        }
+        const writing = this.performWrite();
+        this.latestWrite = writing;
+        return writing;
+    }
+    async performWrite() {
+        if (this.disposed) {
+            return this.currentHref();
+        }
         const identity = this.opts.getIdentity();
         if (!identity || !this.hasWindow()) {
             return this.currentHref();
@@ -108,15 +141,29 @@ export class UrlShareController {
         const snapshot = this.opts.getSnapshot();
         const env = buildEnvelope(snapshot, identity);
         const seq = ++this.writeSeq;
-        const value = await encodeEnvelope(env);
+        this.encodingSeq = seq;
+        let value;
+        try {
+            value = await encodeEnvelope(env);
+        }
+        finally {
+            if (this.encodingSeq === seq) {
+                this.encodingSeq = null;
+            }
+        }
         if (seq !== this.writeSeq || this.disposed) {
-            // Superseded by a newer write (or disposed): drop this result.
+            // A newer encode owns publication. Explicit Copy callers still need
+            // its resulting share URL, not the old address bar while it encodes.
+            if (!this.disposed && this.latestWrite) {
+                return this.latestWrite;
+            }
+            // clear/suspend/dispose invalidate publication without a successor.
             return this.currentHref();
         }
         this.maybeWarnLong(value);
         const url = this.urlWithParam(value);
         this.replaceState(url);
-        this.lastSnapshot = JSON.stringify(snapshot);
+        this.lastSnapshot = JSON.stringify([identity, snapshot]);
         return url;
     }
     /**
@@ -134,6 +181,7 @@ export class UrlShareController {
     }
     /** Reads + decodes the incoming param, applying the defensive version rules. */
     async readIncoming() {
+        const seq = ++this.readSeq;
         const value = this.readParam();
         if (!value) {
             return { kind: 'none' };
@@ -143,6 +191,9 @@ export class UrlShareController {
             parsed = await decodeEnvelope(value);
         }
         catch {
+            return { kind: 'ignore' };
+        }
+        if (this.disposed || seq !== this.readSeq || this.readParam() !== value) {
             return { kind: 'ignore' };
         }
         if (!parsed || typeof parsed !== 'object') {
@@ -176,8 +227,19 @@ export class UrlShareController {
         }
         return { kind: 'envelope', env };
     }
+    /** Invalidates a decode that must no longer open an incoming preview. */
+    cancelIncomingRead() {
+        this.readSeq += 1;
+    }
     /** Removes our param from the URL (the v1 "stop sharing"), preserving the rest. */
     clear() {
+        this.cancelIncomingRead();
+        this.debouncedWrite.cancel();
+        this.pendingWrite = false;
+        this.encodingSeq = null;
+        this.latestWrite = null;
+        this.writeSeq += 1;
+        this.lastSnapshot = this.snapshotJson();
         if (!this.hasWindow()) {
             return;
         }
@@ -188,6 +250,10 @@ export class UrlShareController {
     /** Cancels pending writes and stops reacting to changes. */
     dispose() {
         this.disposed = true;
+        this.cancelIncomingRead();
+        this.pendingWrite = false;
+        this.encodingSeq = null;
+        this.latestWrite = null;
         this.debouncedWrite.cancel();
     }
     // --- URL plumbing -------------------------------------------------------
@@ -295,16 +361,19 @@ async function runStream(bytes, transform) {
     const writeDone = writer.write(bytes).then(() => writer.close());
     const reader = transform.readable.getReader();
     const chunks = [];
-    for (;;) {
-        const { done, value } = await reader.read();
-        if (done) {
-            break;
+    const readDone = (async () => {
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) {
+                break;
+            }
+            if (value) {
+                chunks.push(value);
+            }
         }
-        if (value) {
-            chunks.push(value);
-        }
-    }
-    await writeDone;
+    })();
+    // Observe both promises immediately: either side can reject first.
+    await Promise.all([writeDone, readDone]);
     let total = 0;
     for (const chunk of chunks) {
         total += chunk.length;

@@ -15,7 +15,7 @@
 </div>
 
 A **non-invasive** layer on top of [Tweakpane](https://tweakpane.github.io/) v4
-that adds six features without modifying the core:
+that adds seven features without modifying the core:
 
 1. **State persistence** — control values and the pane's `expanded` state, saved
    to `localStorage` and restored on reload.
@@ -25,16 +25,17 @@ that adds six features without modifying the core:
    (height) and bottom-right corner (both at once, like a regular app) resize it;
    when collapsed, the title bar keeps its width. Position, width and height are
    persisted. Each resize axis can be disabled
-   (`resizableWidth`/`resizableHeight`).
-3. **Persistent open/closed state of pane and folders (nested too)** — the
-   `expanded` state of the pane and of EVERY folder/tab, at any depth, is
-   persisted. Values come from `exportState()`; sub-panel folds are captured by
-   recursive listeners plus a DOM-level safety net.
+   (`resizableWidth`/`resizableHeight`). With `clampToViewport` enabled, rendered width adapts to narrow viewports
+   while retaining the preferred width for larger screens.
+3. **Persistent navigation** — pane/folder expansion and selected tab pages,
+   including nested controls, survive reloads. Recursive listeners and a DOM
+   observer also cover folders added after initialization.
 4. **Preset API** — save changes / save as new / restore / rename / delete /
    export / import named snapshots of the state, in a dedicated folder
-   **always pinned to the bottom** of the pane (last entry, auto-injected). A
-   **"Default"** preset (the factory baseline) is always present, cannot be
-   deleted or overwritten, and is the target of "Restore".
+   appended after the existing controls at initialization. With the menu enabled,
+   **"Default"** captures the current session's factory baseline before persisted
+   values are restored; user actions cannot delete or overwrite it.
+   **Restore** re-applies the active preset, which may be Default or a custom preset.
 5. **Skin theme** (requires `import '@niccolofanton/driftpane/theme.css'`) — `light` / `dark` /
    `auto`: `auto` (default) follows the system's `prefers-color-scheme` in real
    time. Settable at init (`theme`), at runtime (`driftpane.theme.set(...)`) or
@@ -42,11 +43,17 @@ that adds six features without modifying the core:
 6. **Max height + scroll** — beyond a `max-height` (default
    `calc(100dvh - 48px)`, a 24px safe zone) the content becomes scrollable
    without altering the open/close animation. Configurable via `maxHeightVh` or
-   at runtime with `driftpane.setMaxHeight(...)`.
+   at runtime with `driftpane.setMaxHeight(...)`. Larger saved caps are constrained
+   by the current viewport. Color and point pickers use the browser's top layer where
+   supported; otherwise they expand inline and can be scrolled into view.
+7. **Shareable config links** — on by default, the live config and active preset
+   identity are synchronized to a namespaced query parameter. Incoming links
+   preview values with Import / Overwrite / Discard actions.
 
 The layer uses **only the `Pane`'s public API**
-(`exportState`/`importState`, `element`, `addFolder`/`addButton`/`addBlade`,
-`on('change')`/`on('fold')`). No Tweakpane core file is ever touched.
+for state and controls (`exportState`/`importState`, `children`/`pages`, `element`,
+`addFolder`/`addButton`/`addBlade`, `on('change')`/`on('fold')`). Styling and popup
+layout use Tweakpane's DOM classes. No Tweakpane core file is modified.
 
 ## Installation
 
@@ -99,6 +106,8 @@ panel.theme.set('dark'); // sets the theme; .get() / .resolved() read it back
 panel.setMaxHeight(80); // number = vh; string = CSS length; null = default
 panel.resetState(); // clears persisted state (not presets nor position)
 await panel.copyShareLink(); // share the current config as a link
+const backup = panel.exportAllJSON(); // current values, layout, theme and preset store
+panel.importAllJSON(backup); // restore into this panel's namespace
 ```
 
 > **Note on the production import**: the published package is consumed as
@@ -156,11 +165,11 @@ All optional; defaults are applied by the `Driftpane` facade.
 | Option | Type | Default | Meaning |
 |---|---|---|---|
 | `storageNamespace` | `string` | `'default'` | Prefix for localStorage keys (multiple panels on the same origin). |
-| `debounceMs` | `number` | `300` | Debounce window for saving state. |
+| `debounceMs` | `number` | `300` | Delay for separate state-save and URL-sync debounces. |
 | `draggable` | `boolean` | `true` | Drag the panel by its title bar. |
-| `presetsEnabled` | `boolean` | `true` | Auto-injected preset folder (always at the bottom). |
+| `presetsEnabled` | `boolean` | `true` | Preset folder appended after the controls present at initialization. |
 | `presetFolderTitle` | `string` | `'Preset'` | Title of the preset folder. |
-| `defaultPresetName` | `string` | `'Default'` | Name of the (factory) baseline preset that cannot be deleted. |
+| `defaultPresetName` | `string` | `'Default'` | Initial name of the factory baseline; its values/schema refresh each session. |
 | `clampToViewport` | `boolean` | `true` | Keeps the panel within the viewport edges. |
 | `defaultPosition` | `{x,y}` | `{x:24,y:24}` | Position on first launch (safe zone). |
 | `theme` | `'auto'\|'light'\|'dark'` | `'auto'` | Skin theme; `auto` follows `prefers-color-scheme`. |
@@ -168,7 +177,7 @@ All optional; defaults are applied by the `Driftpane` facade.
 | `showResetPosition` | `boolean` | `false` | Show the "Reset position" button. |
 | `showDeletePreset` | `boolean` | `false` | Show "Delete preset" (custom presets only). |
 | `showExportAll` | `boolean` | `false` | Show "Export all": downloads a full namespace backup (state + position + size + theme + every preset). |
-| `width` | `number` | `280` | Initial width in px (clamped to [200, 600]). |
+| `width` | `number` | `280` | Preferred initial width in px ([200, 600]); rendered width fits the viewport when `clampToViewport` is on. |
 | `resizableWidth` | `boolean` | `true` | Width resize handle (right edge). |
 | `resizableHeight` | `boolean` | `true` | Height resize handle (bottom edge); the corner requires both. |
 | `maxHeightVh` | `number` | `calc(100dvh - 48px)` | Height cap in `vh`; beyond it, the content scrolls. |
@@ -179,7 +188,8 @@ All optional; defaults are applied by the `Driftpane` facade.
 Corresponding programmatic API: `panel.theme` (`get`/`resolved`/`set`),
 `panel.setMaxHeight(n|css|null)`, `panel.draggable.resetPosition()`,
 `panel.savePresetAs(name)`, `panel.applyPreset(id)`, `panel.resetState()`,
-`panel.shareUrl()`, `panel.copyShareLink()`, `panel.clearShareUrl()`.
+`panel.shareUrl()`, `panel.copyShareLink()`, `panel.clearShareUrl()`,
+`panel.exportAllJSON()`, `panel.importAllJSON(raw)`.
 
 ## URL config sharing
 
@@ -194,7 +204,12 @@ looking at:
 The shared unit is a **preset with identity**, so the share UI lives in the
 preset folder — enabling `urlSync` therefore **forces the preset menu on** even
 if `presetsEnabled` is false. To get a pane with no preset folder at all,
-disable both.
+set `presetsEnabled: false` and `urlSync: false`.
+
+Sync starts on a value or preset-identity change (including save, rename and
+selection), using a separate debounce with the same `debounceMs` delay as
+persistence. Readonly-monitor updates are deduplicated in both channels so they
+do not keep delaying a pending user edit.
 
 Opening a shared link applies the config as a **live preview** with persistence
 paused (the preview is never written to `localStorage`), then prompts to import,
@@ -203,7 +218,7 @@ overwrite or discard. Discarding restores the exact pre-open state.
 ```ts
 await panel.shareUrl(); // build the link without touching the address bar
 await panel.copyShareLink(); // build it and copy to the clipboard
-panel.clearShareUrl(); // drop the param from the address bar
+panel.clearShareUrl(); // drop the param and cancel pending writes; a new edit can sync again
 ```
 
 The full format (envelope, versioning, reconciliation rules) is specified in
@@ -220,15 +235,16 @@ src/
   persistence.ts      Feature 1+3: save/restore exportState (debounced)
   draggable.ts        Feature 2: fixed container + drag/resize (W/H/corner) via Pointer Events
   presets.ts          Feature 4 (logic): preset CRUD, apply, export/import JSON, Default
-  preset-menu.ts      Feature 4 (UI): bottom preset folder + button rows with icons
+  preset-menu.ts      Feature 4 (UI): preset folder + button rows with icons
   theme-controller.ts Feature 5: light/dark/auto theme (follows prefers-color-scheme)
   scroll.ts           Feature 6: max-height cap + content scroll
+  popups.ts           Popup placement outside the scrolling content
   url-share.ts        Feature 7: shareable config links (encode/decode, replaceState sync)
   styles.ts           Injected CSS (draggable container, handles, scroll, icons)
   driftpane.ts        Facade/orchestrator (Driftpane class)
   index.ts            Barrel of public symbols
-test/                 Vitest suite; mostly against a FakePane double, plus
-                      real-tweakpane-restore.test.ts against the real package
+test/                 Vitest unit and regression suites, including real Tweakpane
+                      state, navigation, preset, backup and URL-sharing tests
 demo/                 Self-contained demo (import-map to a CDN build of Tweakpane)
 docs/                 preview.gif, url-share-spec.md
 theme.css             Optional "frosted glass" skin
@@ -239,14 +255,16 @@ uses only its public `Pane` API.
 
 ## Demo
 
-The demo (`demo/index.html` + `demo/main.ts`) is self-contained and **does not
-requires no build of the package**: Tweakpane 4.0.5 is imported via import-map from
-jsDelivr (the ESM build `dist/tweakpane.js`), while the Driftpane layer is used
-from its local JS build (`demo/lib/`). The demo builds a Pane with three folders
-(`Movement`, `Appearance` with a `Stroke` sub-folder, `Advanced`), bindings of
-various kinds (slider, color, list, checkbox, text, button) and an animated
-`<canvas>` preview that reflects the parameters, so the persisted state is
-visibly "there" after a refresh.
+The demo (`demo/index.html` + `demo/main.ts`) is a complete interactive playground.
+The original animated wave and control gallery are joined by ten guided areas:
+all seven core features, full backups, the apply hook and an independent panel
+with runtime controls. A receiver sandbox exercises Import / Overwrite / Discard
+without replacing the sender's saved state. Desktop and mobile layouts use the
+same package skin and public API.
+
+Tweakpane 4.0.5 is loaded through the existing jsDelivr import map; the local
+library build and demo entry are included. See [`demo/README.md`](https://github.com/niccolofanton/driftpane/blob/main/demo/README.md)
+for a feature-by-feature walkthrough.
 
 ### 1. Build (transpile TS -> JS)
 
@@ -274,23 +292,17 @@ python3 -m http.server 8080      # or:  npx http-server -p 8080
 # then open http://localhost:8080/index.html
 ```
 
-### What to try (the features)
+### What to try
 
-1. Move the sliders and open/close the folders, then **reload**: values and
-   open/closed state come back identical (feature 1 + 3).
-2. Drag the panel by its **title bar** (mouse or touch); resize it from the
-   right edge (width), the bottom edge (height) or the **bottom-right corner**
-   (both at once): position and size survive the refresh (feature 2).
-3. Click the title bar **without dragging** to collapse the panel: this state
-   persists too (feature 1).
-4. In the **Preset** folder (at the bottom): *Save as new* (prompts for a name)
-   creates a custom preset; *Save changes* overwrites the active one (with
-   confirmation); *Restore* reverts to the active preset, with **"Default"**
-   always available as a baseline that can't be deleted; *Rename preset*,
-   *Export*, *Import*. *Import* applies the config immediately and selects it
-   (with a confirmation toast). The *Theme* control, *Reset position* and
-   *Delete preset* are optional (`showThemeControl` / `showResetPosition` /
-   `showDeletePreset`) (feature 4 + 5).
+1. Shuffle the signal, change a binding, fold a nested folder, switch a tab and reload.
+2. Drag and resize the panel; try a compact cap and both popup pickers.
+3. Save a custom preset, edit it and Restore. The full menu includes rename,
+   overwrite, delete and preset JSON import/export.
+4. Switch the theme from either the page or the pane, then export/import a full backup.
+5. Open the receiver sandbox to import a shared preset; change it again in the sender
+   and reopen the receiver to try Overwrite or Discard.
+6. Edit the independent panel and add runtime controls. Its state and theme stay
+   separate; the apply feed shows callbacks from the main panel.
 
 ## localStorage keys
 
@@ -299,7 +311,7 @@ All namespaced as `driftpane:<namespace>:<suffix>` (default namespace
 
 | Key                                 | Contents |
 |-------------------------------------|-----------|
-| `driftpane:<ns>:state`             | **Scoped** snapshot of `exportState()` (without the preset folder). Source of truth for values + the `expanded` state of pane and folders. Written debounced on `change`/`fold`. |
+| `driftpane:<ns>:state`             | **Scoped** snapshot of `exportState()` (without the preset folder). Values, pane/folder expansion and tab selection; saved after value, fold or tab changes. |
 | `driftpane:<ns>:position`          | `{ x, y }` of the draggable container's position (viewport px). Independent of the pane's state. Written at drag end and re-clamped on resize. |
 | `driftpane:<ns>:width`             | Pane width in px (number). Constrained to [200, 600]. Written at resize end. |
 | `driftpane:<ns>:maxHeight`         | CSS length of the height cap (e.g. `"80vh"`, `"calc(100dvh - 48px)"`). Written at vertical resize end / by `setMaxHeight`. |
@@ -308,9 +320,10 @@ All namespaced as `driftpane:<namespace>:<suffix>` (default namespace
 
 ## Preset model
 
-A preset is a **named**, **scoped** snapshot of `pane.exportState()` — values
-only, **without** the open/closed (`expanded`) state of folders/tabs (that memory
-is global, not per-preset):
+A preset is a **named**, **scoped** snapshot of `pane.exportState()`. It excludes
+the manager folder, pane/folder `expanded` flags and tab-page `selected` flags
+plus their derived `hidden` flags. Navigation is global, not per-preset;
+ordinary controls retain their own `hidden` state:
 
 ```ts
 interface DriftpanePreset {
@@ -319,7 +332,7 @@ interface DriftpanePreset {
   createdAt: number;   // epoch ms
   updatedAt: number;   // epoch ms
   custom?: boolean;    // false = "Default" baseline (not deletable/overwritable); legacy/missing = custom
-  state: Record<string, unknown>; // exportState() WITHOUT the preset folder or any `expanded` flag
+  state: Record<string, unknown>; // scoped state without folder expansion or tab navigation
 }
 
 interface DriftpanePresetStore {
@@ -344,44 +357,59 @@ is also available programmatically via `exportJSON()`, in a versioned envelope:
 }
 ```
 
-**Import JSON** recognizes: the collection envelope (merge, colliding ids
+**Import JSON** recognizes the collection envelope (merge, colliding IDs
 regenerated), a single "bare" preset `{ name, state }`, or a raw
-`exportState()` state. After importing, it **applies and selects** the first
-imported preset immediately (so the effect is visible on the panel) and shows a
-confirmation toast. Malformed input does not break the UI (the error is handled,
-with an on-screen warning).
+`exportState()` state, including the current pane's manager folder. It tries to
+apply and select the first imported preset immediately. An incompatible preset
+remains in the collection but does not change the active selection. The menu
+shows a toast for import results and errors.
+
+### Full namespace backups
+
+`panel.exportAllJSON()` captures current values and navigation, position,
+preferred width, height cap, theme and the preset collection in a
+`driftpane-backup` version 1 envelope. It flushes the live state before exporting.
+Restore it with `panel.importAllJSON(raw)` or the menu's **Import** button.
+
+The backup is applied to the receiving panel's namespace, regardless of the
+source namespace recorded in the file. Provided settings replace the current
+ones; omitted fields remain unchanged. A provided preset collection replaces
+the custom collection, retaining the receiver's current factory Default and
+mapping a backup Default selection to that local baseline. Included pane state
+must match the receiving pane's structure. Invalid imports throw from the API
+and are shown as errors by the menu. A successful state restore emits
+`onStateApplied('restore')`.
 
 ## Critical core constraint (why scoping is needed)
 
 `ContainerBladeController.importState` (in the Tweakpane core, at
 `packages/core/src/blade/common/controller/container-blade.ts` upstream) matches its
 children **positionally** (`rack.children[index].importState(state.children[index])`)
-and requires that **every** child import successfully. Because the preset folder
-is the **last** child of the pane (we append it at the bottom), it must be
-**excluded** from the persisted/preset snapshot
-(`state-scope.stripManagerChild`, at the last index) and **re-inserted** from
-its live state before `importState` (`state-scope.mergeManagerChild`), otherwise
-the structure wouldn't match and the import would fail. The "last child" index
-is computed at runtime via a lazy resolver passed in by the controllers (see
-`driftpane.ts`).
+and requires that **every** child import successfully. The manager folder must
+be **excluded** from persisted/preset snapshots (`stripManagerChild`) and
+**re-inserted** from its live state before import (`mergeManagerChild`). It is
+appended at initialization, but its index is resolved by the mounted folder's
+identity so adding or removing controls later does not scope the wrong child.
+Structure checks include binding keys, labels and readonly status; ambiguous
+same-key bindings with identical labels still require stable ordering.
 
 ## Design decisions
 
 - **Drag position independent of presets**: applying a preset only calls
   `importState()` and does not move the panel. The position lives in its own
   separate key. The preset folder offers an optional "Reset position" button.
-- **Open/closed state is global, not per-preset**: presets store values only,
-  with the `expanded` state of folders/tabs stripped out. That memory lives in
-  the global `state` key, so applying a preset never changes which panels are
-  open. At apply time the current `expanded` flags are overlaid back onto the
-  preset (`importState` requires the field).
+- **Navigation is global, not per-preset**: folder expansion and tab selection
+  live in the global `state` key. Preset/share applies overlay the current
+  navigation and synchronize Tweakpane's tab selection model after import.
 - **Export = the selected preset** (the file is named after it); the optional
-  **Export all** button downloads a full namespace backup (`exportAllJSON()`).
+  **Export all** button downloads a full namespace backup (`exportAllJSON()`),
+  restored by **Import** or `importAllJSON(raw)`.
   The whole preset collection stays available via the `exportJSON()` /
   `exportPresetJSON(id)` programmatic APIs.
 - **Debounce only, no `ev.last` filter**: the trailing-edge debounce already
   collapses an entire gesture into a single write by reading `exportState()` at
-  flush time.
+  flush time. Readonly-monitor noise is ignored when scheduling, so a pending
+  editable change can still reach the end of its debounce window.
 
 ## License
 

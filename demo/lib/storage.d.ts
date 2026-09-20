@@ -10,7 +10,6 @@ export declare function isStorageAvailable(): boolean;
  */
 export declare class DriftpaneStorage {
     private readonly namespace;
-    private readonly available;
     constructor(namespace: string);
     /** Builds the full namespaced key for a given suffix. */
     keyFor(suffix: string): string;

@@ -50,6 +50,7 @@ export class ThemeController {
 
 	/** Listener currently attached to `mql` (only in 'auto' mode). */
 	private mqlListener: ((ev: MediaQueryListEvent) => void) | null = null;
+	private readonly listeners = new Set<() => void>();
 
 	constructor(opts: ThemeControllerOptions) {
 		this.target = opts.target;
@@ -78,14 +79,27 @@ export class ThemeController {
 
 	/** Sets the setting, persists and applies it (updates data-theme). */
 	public set(theme: DriftpaneTheme): void {
+		if (!isDriftpaneTheme(theme)) {
+			return;
+		}
 		this.setting = theme;
 		this.storage.writeJSON(STORAGE_KEY, theme);
 		this.apply();
+		for (const listener of this.listeners) {
+			listener();
+		}
+	}
+
+	/** Observes setting changes, including those made through the public API. */
+	public subscribe(listener: () => void): () => void {
+		this.listeners.add(listener);
+		return () => this.listeners.delete(listener);
 	}
 
 	/** Removes the matchMedia listener. */
 	public dispose(): void {
 		this.detachListener();
+		this.listeners.clear();
 	}
 
 	// --- Internals ----------------------------------------------------------

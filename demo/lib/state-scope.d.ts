@@ -2,8 +2,8 @@ import { SerializedState } from './types.js';
 /** Number of children present in the exported state (0 if absent/invalid). */
 export declare function childrenCount(state: SerializedState): number;
 /**
- * STRUCTURE signature of a state: folder titles, binding keys and the shape of
- * the tree, IGNORING values and the `expanded` state. Used to tell whether two
+ * STRUCTURE signature of a state: folder titles, binding keys/labels and the shape of
+ * the tree, ignoring values and folder/tab navigation. Used to tell whether two
  * snapshots describe the same pane: the core `importState` is positional and
  * would misapply a state with a different structure (corrupting labels and
  * values), so we compare signatures before importing.
@@ -27,13 +27,23 @@ export declare function stripManagerChild(full: SerializedState, managerChildInd
  * @param target Current live state of the pane (must contain the preset folder
  *               at the expected index); provides the manager segment to re-insert.
  * @param scoped Scoped state to apply (user values/expanded).
- * @param managerChildIndex Index of the preset folder (typically the last one).
+ * @param managerChildIndex Current index of the actual mounted preset folder.
  */
 export declare function mergeManagerChild(target: SerializedState, scoped: SerializedState, managerChildIndex: number): SerializedState;
 /**
- * Returns a deep copy of `state` with every `expanded` field removed. Presets use
- * this so they do NOT store the open/closed state of folders/tabs — that memory
- * is GLOBAL (persisted in the `state` key), not per-preset.
+ * Imports a full pane state and repairs Tweakpane 4's tab selection model.
+ * Upstream imports the tab header/visibility but not TabPageApi.selected; using
+ * the public setter makes subsequent clicks and select events work normally.
+ */
+export declare function importPaneState(pane: {
+    importState(state: SerializedState): boolean;
+    exportState?(): SerializedState;
+}, state: SerializedState): boolean;
+/**
+ * Returns a deep copy without folder expansion or tab selection/visibility.
+ * The latter is recognized by the tab page's selected/title/children fields.
+ * Presets use this to keep folder expansion and tab selection in the global
+ * persisted `state` key rather than in each preset.
  */
 export declare function stripExpanded(state: SerializedState): SerializedState;
 /**
@@ -46,7 +56,7 @@ export declare function stripExpanded(state: SerializedState): SerializedState;
  */
 export declare function stripReadonly(state: SerializedState): SerializedState;
 /**
- * Returns a copy of `target` in which every node's `expanded` field is taken from
+ * Returns a copy of `target` in which expansion and tab navigation are taken from
  * the structurally-corresponding node in `source` (matched positionally by
  * `children`/`pages` index). Applied before importing a preset so applying it
  * keeps the CURRENT open/closed state of folders/tabs instead of forcing the

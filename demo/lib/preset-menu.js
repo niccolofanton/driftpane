@@ -24,8 +24,13 @@ export class PresetMenu {
         this.folder = null;
         this.listBlade = null;
         this.fileInput = null;
+        this.fileReader = null;
+        this.disposed = false;
         /** True while refreshList() writes the selector value programmatically. */
         this.syncingList = false;
+        this.unsubscribePresets = null;
+        this.unsubscribeTheme = null;
+        this.managerIndexAtMount = -1;
         // Buttons whose disabled state depends on the active preset.
         this.saveChangesBtn = null;
         this.revertBtn = null;
@@ -41,12 +46,17 @@ export class PresetMenu {
      * @returns the created FolderLike.
      */
     mount() {
+        this.disposed = false;
         // No `index`: the core appends the folder at the end -> last child.
         const folder = this.pane.addBlade({
             view: 'folder',
             title: this.opts.folderTitle,
         });
         this.folder = folder;
+        const exportedChildren = this.pane.exportState?.()['children'];
+        this.managerIndexAtMount = Array.isArray(exportedChildren)
+            ? exportedChildren.length - 1
+            : -1;
         // THEME selector (optional): as the FIRST entry, before the preset selector.
         if (this.opts.themeController) {
             const themeController = this.opts.themeController;
@@ -60,7 +70,20 @@ export class PresetMenu {
                 ],
                 value: themeController.get(),
             });
+            let syncingTheme = false;
+            this.unsubscribeTheme =
+                themeController.subscribe?.(() => {
+                    syncingTheme = true;
+                    try {
+                        themeBlade.value = themeController.get();
+                    }
+                    finally {
+                        syncingTheme = false;
+                    }
+                }) ?? null;
             themeBlade.on('change', (ev) => {
+                if (syncingTheme)
+                    return;
                 const value = ev.value;
                 if (value === 'auto' || value === 'light' || value === 'dark') {
                     themeController.set(value);
@@ -85,9 +108,9 @@ export class PresetMenu {
                 if (ok) {
                     this.opts.onAfterApply();
                 }
-                // The active preset has changed: realign the dependent buttons
-                // (Save changes / Delete disabled on the Default, etc.).
-                this.updateButtonStates();
+                // Failed imports retain the previous active preset: reflect that in
+                // the selector so subsequent actions target the visible selection.
+                this.refreshList();
             }
         });
         // Row: [Restore | Rename]. Restore discards live changes and returns to
@@ -145,8 +168,27 @@ export class PresetMenu {
         }
         // Hidden file input for file-based import.
         this.fileInput = this.createFileInput();
+        this.unsubscribePresets = this.presets.subscribe(() => this.refreshList());
         this.updateButtonStates();
         return folder;
+    }
+    /** Locate the actual mounted manager even after consumers add more controls. */
+    getManagerIndex() {
+        if (!this.folder)
+            return -1;
+        const children = this.pane.children;
+        if (!children)
+            return this.managerIndexAtMount;
+        const index = children.indexOf(this.folder);
+        if (index < 0)
+            return -1;
+        const exportedChildren = this.pane.exportState?.()['children'];
+        // Lightweight adapters may expose folders only; full Tweakpane APIs have
+        // equal child counts and therefore need no offset.
+        const offset = Array.isArray(exportedChildren)
+            ? Math.max(0, exportedChildren.length - children.length)
+            : 0;
+        return index + offset;
     }
     /**
      * Rebuilds the selector options when the preset list changes.
@@ -295,6 +337,12 @@ export class PresetMenu {
     }
     /** Unmounts the menu and removes the hidden file input. */
     dispose() {
+        this.disposed = true;
+        this.cancelFileRead();
+        this.unsubscribePresets?.();
+        this.unsubscribePresets = null;
+        this.unsubscribeTheme?.();
+        this.unsubscribeTheme = null;
         this.clearSharePrompt();
         if (this.fileInput && this.fileInput.parentNode) {
             this.fileInput.parentNode.removeChild(this.fileInput);
@@ -397,10 +445,11 @@ export class PresetMenu {
             return;
         }
         if (this.presets.removeActive()) {
-            // After deletion the active preset changes: realign the list and any
-            // applied state.
+            const successor = this.presets.activeId();
+            if (successor && this.presets.apply(successor)) {
+                this.opts.onAfterApply();
+            }
             this.refreshList();
-            this.opts.onAfterApply();
             this.notify(`Preset "${name}" deleted.`);
         }
     }
@@ -511,18 +560,38 @@ export class PresetMenu {
             if (!file) {
                 return;
             }
+            if (this.disposed)
+                return;
+            this.cancelFileRead();
             const reader = new FileReader();
+            this.fileReader = reader;
             reader.onload = () => {
+                if (this.disposed || this.fileReader !== reader)
+                    return;
+                this.fileReader = null;
                 const raw = String(reader.result ?? '');
                 this.applyImport(raw);
             };
             reader.onerror = () => {
+                if (this.disposed || this.fileReader !== reader)
+                    return;
+                this.fileReader = null;
                 this.notify('Error reading the file.');
             };
             reader.readAsText(file);
         });
         doc.body.appendChild(input);
         return input;
+    }
+    cancelFileRead() {
+        const reader = this.fileReader;
+        this.fileReader = null;
+        if (!reader)
+            return;
+        reader.onload = null;
+        reader.onerror = null;
+        if (reader.readyState === 1)
+            reader.abort();
     }
     importFromPrompt() {
         if (typeof window === 'undefined' || !window.prompt) {
@@ -535,6 +604,16 @@ export class PresetMenu {
     }
     applyImport(raw) {
         try {
+            const parsed = JSON.parse(raw);
+            if (parsed &&
+                typeof parsed === 'object' &&
+                parsed.format === 'driftpane-backup' &&
+                this.opts.onImportBackup) {
+                this.opts.onImportBackup(raw);
+                this.refreshList();
+                this.notify('Backup restored.');
+                return;
+            }
             const { imported, ids } = this.presets.importJSON(raw);
             if (imported > 0 && ids.length > 0) {
                 // Apply and select the first imported preset IMMEDIATELY: this way

@@ -31,6 +31,13 @@ export declare class UrlShareController {
     private suspended;
     private disposed;
     private attached;
+    private pendingWrite;
+    /** Latest encode that may still publish, separate from a queued debounce. */
+    private encodingSeq;
+    /** Explicit callers superseded by another encode wait for its actual URL. */
+    private latestWrite;
+    /** Incoming decodes can be cancelled independently of outgoing writes. */
+    private readSeq;
     /** Monotonic write token; async encodes that are no longer the latest are dropped. */
     private writeSeq;
     private warnedLong;
@@ -45,6 +52,8 @@ export declare class UrlShareController {
     private lastSnapshot;
     /** Single root `change` listener: schedules a debounced URL write. */
     private readonly onChange;
+    /** Preset CRUD can change identity without emitting a binding change. */
+    syncIdentity(): void;
     constructor(pane: SharePaneLike, opts: UrlShareOptions);
     /**
      * Attaches the root `change` listener. Call this AFTER the initial state
@@ -67,6 +76,7 @@ export declare class UrlShareController {
      * identity to stamp or no window.
      */
     writeNow(): Promise<string>;
+    private performWrite;
     /**
      * Builds the share URL WITHOUT mutating the address bar (for `shareUrl()`).
      * Returns the current href if there is no identity to stamp.
@@ -74,6 +84,8 @@ export declare class UrlShareController {
     buildUrl(): Promise<string>;
     /** Reads + decodes the incoming param, applying the defensive version rules. */
     readIncoming(): Promise<ShareReadResult>;
+    /** Invalidates a decode that must no longer open an incoming preview. */
+    cancelIncomingRead(): void;
     /** Removes our param from the URL (the v1 "stop sharing"), preserving the rest. */
     clear(): void;
     /** Cancels pending writes and stops reacting to changes. */

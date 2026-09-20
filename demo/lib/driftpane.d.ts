@@ -30,12 +30,15 @@ export declare class Driftpane {
     private readonly draggableEnabled;
     /** URL sharing controller, or null when `urlSync` is disabled. */
     private readonly urlShare;
-    /** Resolver for the preset folder index (last child), shared by all features. */
+    /** Resolver for the actual preset folder index, shared by all features. */
     private readonly managerChildIndex;
     /** Host of the height cap (the root panel, = pane.element). */
     private readonly maxHeightHost;
     /** Consumer hook fired after every state application (see DriftpaneOptions). */
     private readonly onStateApplied?;
+    private disposed;
+    private sharePreviewActive;
+    private unsubscribePresets?;
     constructor(pane: PaneLike, opts?: DriftpaneOptions);
     /**
      * Sets the maximum height of the panel at runtime, and persists it. Beyond
@@ -48,9 +51,12 @@ export declare class Driftpane {
     /**
      * Serializes a FULL backup of the namespace's persisted state into a versioned
      * JSON envelope: panel values/folds (`state`), drag `position`, `width`,
-     * `maxHeight`, `theme` and the whole `presets` store. Missing keys are omitted.
+     * `maxHeight`, `theme` and the whole `presets` store. Unstored settings fall
+     * back to the current controllers, so a fresh panel can also be backed up.
      */
     exportAllJSON(): string;
+    /** Restores a namespace backup into this panel, preserving its factory Default. */
+    importAllJSON(raw: string): void;
     /** Saves the current state as a new preset with the given name. */
     savePresetAs(name: string): void;
     /** Applies a preset by id and updates the UI. */

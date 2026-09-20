@@ -6,12 +6,14 @@
 // We save SCOPED (without the preset folder, see state-scope) with a debounce
 // on `change` + `fold`, and restore with `importState` on load.
 import { debounce } from './debounce.js';
-import { mergeManagerChild, stripManagerChild, structureSignature, } from './state-scope.js';
+import { importPaneState, mergeManagerChild, stripManagerChild, stripReadonly, structureSignature, } from './state-scope.js';
 /** localStorage key suffix for the pane state. */
 const STATE_KEY = 'state';
 export class PersistenceController {
     constructor(pane, storage, opts) {
         this.disposed = false;
+        this.lastChangeSnapshot = null;
+        this.observedSubpanels = new WeakSet();
         // When paused, change/fold listeners and saveNow() are no-ops. Used during the
         // URL share preview window so the previewed (not-yet-accepted) state is never
         // written to localStorage.
@@ -20,11 +22,26 @@ export class PersistenceController {
         this.storage = storage;
         this.managerChildIndex = opts.managerChildIndex;
         this.debouncedSave = debounce(() => this.saveNow(), opts.debounceMs);
-        // Single rule: every change/fold schedules a debounced save.
-        // We do not filter by ev.last: the trailing-edge debounce already collapses
-        // the entire burst into a single write by reading exportState at flush.
-        this.onChange = () => this.scheduleSave();
-        this.onFold = () => this.scheduleSave();
+        // Ignore readonly-monitor noise so it cannot keep postponing an editable
+        // change. Genuine changes/folds still use a trailing debounce that reads
+        // the latest full state at flush.
+        this.onChange = () => {
+            if (this.disposed || this.paused) {
+                return;
+            }
+            try {
+                const snapshot = JSON.stringify(stripReadonly(stripManagerChild(this.pane.exportState(), this.resolveManagerIndex())));
+                if (snapshot === this.lastChangeSnapshot) {
+                    return;
+                }
+                this.lastChangeSnapshot = snapshot;
+            }
+            catch {
+                // If export fails, keep the usual best-effort saving behavior.
+            }
+            this.scheduleSave();
+        };
+        this.onFold = () => this.onChange(undefined);
         this.pane.on('change', this.onChange);
         this.pane.on('fold', this.onFold);
         // IMPORTANT: the root RackApi emits ONLY 'change'; the root 'fold' event
@@ -33,11 +50,24 @@ export class PersistenceController {
         // step the open/closed state of the sub-panels would never be saved. We
         // therefore register a listener on EVERY descendant folder/tab.
         this.attachSubpanelListeners(this.pane);
+        this.subpanelObserver =
+            typeof MutationObserver !== 'undefined'
+                ? new MutationObserver(() => {
+                    if (!this.disposed) {
+                        this.attachSubpanelListeners(this.pane);
+                        this.onChange(undefined);
+                    }
+                })
+                : null;
+        this.subpanelObserver?.observe(this.pane.element, {
+            childList: true,
+            subtree: true,
+        });
         // DOM-level safety net: a fold/page-change is always a click on the
         // title-bar inside the pane element. A single delegated listener schedules
         // a save on every click (debounced), so the sub-panel state is captured
         // robustly, regardless of the propagation of the API events.
-        this.onPaneClick = () => this.scheduleSave();
+        this.onPaneClick = () => this.onChange(undefined);
         this.pane.element.addEventListener('click', this.onPaneClick);
         // Flush pending saves when the page is about to be hidden or unloaded, so
         // we do not lose the last change.
@@ -67,8 +97,12 @@ export class PersistenceController {
                 return;
             }
             const n = node;
+            const observed = this.observedSubpanels.has(n);
+            this.observedSubpanels.add(n);
             // Folder: exposes 'expanded' in addition to 'on' -> persist its folds.
-            if (typeof n.on === 'function' && 'expanded' in n) {
+            if (!observed &&
+                typeof n.on === 'function' &&
+                'expanded' in n) {
                 try {
                     n.on('fold', this.onFold);
                 }
@@ -77,7 +111,7 @@ export class PersistenceController {
                 }
             }
             // Tab: exposes 'pages' in addition to 'on' -> persist the page change.
-            if (typeof n.on === 'function' && Array.isArray(n.pages)) {
+            if (!observed && typeof n.on === 'function' && Array.isArray(n.pages)) {
                 try {
                     n.on('select', this.onFold);
                 }
@@ -122,7 +156,7 @@ export class PersistenceController {
             // Re-insert the preset folder (live state) to satisfy the positional
             // match of the core importState.
             const full = mergeManagerChild(live, scoped, managerIndex);
-            return this.pane.importState(full);
+            return importPaneState(this.pane, full);
         }
         catch {
             // Incompatible state or error: do not break startup, ignore.
@@ -153,6 +187,7 @@ export class PersistenceController {
     /** Resumes saving after a {@link pause}. */
     resume() {
         this.paused = false;
+        this.lastChangeSnapshot = null;
     }
     /** Immediately saves the current scoped state to localStorage. */
     saveNow() {
@@ -172,6 +207,9 @@ export class PersistenceController {
     clear() {
         this.debouncedSave.cancel();
         this.storage.remove(STATE_KEY);
+        // The click that invoked reset must not immediately recreate the key.
+        // Saving resumes when actual values, navigation or structure change.
+        this.lastChangeSnapshot = JSON.stringify(stripReadonly(stripManagerChild(this.pane.exportState(), this.resolveManagerIndex())));
     }
     /** Tears down the handlers and cancels pending saves. */
     dispose() {
@@ -179,6 +217,7 @@ export class PersistenceController {
             return;
         }
         this.disposed = true;
+        this.subpanelObserver?.disconnect();
         this.debouncedSave.cancel();
         this.pane.element.removeEventListener('click', this.onPaneClick);
         if (typeof window !== 'undefined') {

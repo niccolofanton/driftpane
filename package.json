@@ -1,7 +1,7 @@
 {
 	"name": "@niccolofanton/driftpane",
-	"version": "1.2.2",
-	"description": "Non-invasive layer on top of Tweakpane v4: localStorage state persistence, a draggable/resizable panel, persistent fold state, and a presets menu (save/apply/export/import JSON).",
+	"version": "1.3.0",
+	"description": "Tweakpane v4 with persistent state and navigation, drag/resize, presets, themes, scroll, full backups and shareable config links.",
 	"type": "module",
 	"sideEffects": [
 		"**/*.css"

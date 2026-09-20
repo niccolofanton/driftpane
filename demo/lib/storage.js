@@ -28,7 +28,6 @@ export function isStorageAvailable() {
 export class DriftpaneStorage {
     constructor(namespace) {
         this.namespace = namespace;
-        this.available = isStorageAvailable();
     }
     /** Builds the full namespaced key for a given suffix. */
     keyFor(suffix) {
@@ -43,9 +42,6 @@ export class DriftpaneStorage {
      * exist, if the storage is unavailable, or if the JSON is malformed.
      */
     readJSON(suffix, fallback) {
-        if (!this.available) {
-            return fallback;
-        }
         try {
             const raw = localStorage.getItem(this.keyFor(suffix));
             if (raw === null) {
@@ -63,9 +59,6 @@ export class DriftpaneStorage {
      * unavailable or if the write fails (e.g. quota exceeded).
      */
     writeJSON(suffix, value) {
-        if (!this.available) {
-            return;
-        }
         try {
             localStorage.setItem(this.keyFor(suffix), JSON.stringify(value));
         }
@@ -75,9 +68,6 @@ export class DriftpaneStorage {
     }
     /** Removes a key. No-op if the storage is unavailable. */
     remove(suffix) {
-        if (!this.available) {
-            return;
-        }
         try {
             localStorage.removeItem(this.keyFor(suffix));
         }

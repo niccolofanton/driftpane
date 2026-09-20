@@ -21,6 +21,7 @@ export class ThemeController {
     constructor(opts) {
         /** Listener currently attached to `mql` (only in 'auto' mode). */
         this.mqlListener = null;
+        this.listeners = new Set();
         this.target = opts.target;
         this.storage = opts.storage;
         // Persisted read > initial: if a valid theme is in storage, it wins.
@@ -41,13 +42,25 @@ export class ThemeController {
     }
     /** Sets the setting, persists and applies it (updates data-theme). */
     set(theme) {
+        if (!isDriftpaneTheme(theme)) {
+            return;
+        }
         this.setting = theme;
         this.storage.writeJSON(STORAGE_KEY, theme);
         this.apply();
+        for (const listener of this.listeners) {
+            listener();
+        }
+    }
+    /** Observes setting changes, including those made through the public API. */
+    subscribe(listener) {
+        this.listeners.add(listener);
+        return () => this.listeners.delete(listener);
     }
     /** Removes the matchMedia listener. */
     dispose() {
         this.detachListener();
+        this.listeners.clear();
     }
     // --- Internals ----------------------------------------------------------
     /**

@@ -21,6 +21,7 @@ tsc -p tsconfig.lib.json
 
 echo "[driftpane] build demo   -> demo/main.js"
 tsc -p tsconfig.demo.json
+cp ../theme.css ./theme.css
 
 echo "[driftpane] done. Serve the folder with an HTTP server and open index.html:"
 echo "             python3 -m http.server 8080   (then http://localhost:8080/)"

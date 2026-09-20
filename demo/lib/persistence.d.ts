@@ -14,9 +14,9 @@ export interface PaneLike {
 export interface PersistenceOptions {
     debounceMs: number;
     /**
-     * Index of the preset folder to exclude from the snapshot. The preset folder is
-     * the LAST child, so it is typically a resolver `() => last index`
-     * (see driftpane.ts); it also accepts a fixed number (used by the tests).
+     * Index of the preset folder to exclude from the snapshot. A resolver tracks
+     * the actual folder when controls are inserted or removed; a fixed number is
+     * also accepted (used by the tests).
      */
     managerChildIndex: number | (() => number);
 }
@@ -26,6 +26,9 @@ export declare class PersistenceController {
     private readonly managerChildIndex;
     private readonly debouncedSave;
     private disposed;
+    private lastChangeSnapshot;
+    private readonly observedSubpanels;
+    private readonly subpanelObserver;
     private paused;
     private readonly onPageHide;
     private readonly onVisibilityChange;

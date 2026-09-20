@@ -26,6 +26,16 @@ const MIN_WIDTH = 200;
 const MAX_WIDTH = 600;
 /** Minimum panel height during vertical resize (px). */
 const MIN_HEIGHT = 120;
+/** Stored coordinates must be complete and finite before reaching geometry math. */
+function isPosition(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+        return false;
+    const position = value;
+    return (typeof position['x'] === 'number' &&
+        Number.isFinite(position['x']) &&
+        typeof position['y'] === 'number' &&
+        Number.isFinite(position['y']));
+}
 export class DraggableController {
     constructor(pane, storage, opts) {
         this.container = null;
@@ -33,6 +43,11 @@ export class DraggableController {
         this.resizeHandle = null;
         this.resizeHandleY = null;
         this.resizeHandleCorner = null;
+        this.sizeObserver = null;
+        this.previousCursor = '';
+        this.previousTouchAction = '';
+        this.widthChanged = false;
+        this.heightChanged = false;
         // State of the WIDTH resize gesture (independent of the drag).
         this.resizing = false;
         this.activeResizePointerId = null;
@@ -61,13 +76,19 @@ export class DraggableController {
         this.startPointerX = 0;
         this.startPointerY = 0;
         this.pane = pane;
+        this.win = pane.element.ownerDocument.defaultView;
         this.storage = storage;
         this.clampEnabled = opts.clampToViewport;
-        this.defaultPosition = opts.defaultPosition;
+        this.defaultPosition = isPosition(opts.defaultPosition)
+            ? { ...opts.defaultPosition }
+            : { x: 24, y: 24 };
         this.resizableWidth = opts.resizableWidth ?? true;
         this.resizableHeight = opts.resizableHeight ?? true;
         // Initial position: from storage if present, otherwise the default.
-        this.position = this.storage.readJSON(POSITION_KEY, this.defaultPosition);
+        const savedPosition = this.storage.readJSON(POSITION_KEY, null);
+        this.position = isPosition(savedPosition)
+            ? { ...savedPosition }
+            : { ...this.defaultPosition };
         // Initial width: from storage if valid, otherwise the "sensible size".
         const fallbackWidth = typeof opts.width === 'number' && isFinite(opts.width)
             ? opts.width
@@ -101,24 +122,26 @@ export class DraggableController {
         }
         const paneElem = this.pane.element;
         const doc = paneElem.ownerDocument;
-        // Build the fixed container and move pane.element into it.
-        const container = doc.createElement('div');
-        container.className = 'driftpane-drag-container';
-        container.style.position = 'fixed';
-        container.style.left = '0px';
-        container.style.top = '0px';
-        container.style.margin = '0';
-        const parent = paneElem.parentElement;
-        if (parent) {
-            parent.insertBefore(container, paneElem);
+        // Keep the same wrapper across disable/enable cycles.
+        let container = this.container;
+        if (!container) {
+            container = doc.createElement('div');
+            container.className = 'driftpane-drag-container';
+            container.style.position = 'fixed';
+            container.style.left = '0px';
+            container.style.top = '0px';
+            container.style.margin = '0';
+            const parent = paneElem.parentElement;
+            if (parent) {
+                parent.insertBefore(container, paneElem);
+            }
+            else {
+                doc.body.appendChild(container);
+            }
+            container.appendChild(paneElem);
+            this.container = container;
         }
-        else {
-            doc.body.appendChild(container);
-        }
-        container.appendChild(paneElem);
-        this.container = container;
-        // Explicit width: when collapsed the title-bar does NOT shrink.
-        container.style.width = `${this.width}px`;
+        this.applyWidth();
         // Resize handle on the right edge (width) — only if enabled.
         if (this.resizableWidth) {
             const resizeHandle = doc.createElement('div');
@@ -150,6 +173,8 @@ export class DraggableController {
         // Apply the initial position (clamped).
         this.applyPosition();
         if (this.handle) {
+            this.previousCursor = this.handle.style.cursor;
+            this.previousTouchAction = this.handle.style.touchAction;
             this.handle.style.cursor = 'move';
             this.handle.style.touchAction = 'none';
             this.handle.addEventListener('pointerdown', this.onPointerDown);
@@ -157,10 +182,16 @@ export class DraggableController {
             // prevent the fold toggle when the user has dragged.
             this.handle.addEventListener('click', this.onClickCapture, true);
         }
-        if (typeof window !== 'undefined') {
-            window.addEventListener('resize', this.onResize);
-        }
+        this.win?.addEventListener('resize', this.onResize);
         this.enabled = true;
+        const Observer = doc.defaultView?.ResizeObserver;
+        if (Observer) {
+            this.sizeObserver = new Observer(() => {
+                if (this.enabled)
+                    this.reclampPosition();
+            });
+            this.sizeObserver.observe(paneElem);
+        }
     }
     /** Disables the drag by removing the listeners (keeps the container). */
     disable() {
@@ -170,7 +201,8 @@ export class DraggableController {
         if (this.handle) {
             this.handle.removeEventListener('pointerdown', this.onPointerDown);
             this.handle.removeEventListener('click', this.onClickCapture, true);
-            this.handle.style.cursor = '';
+            this.handle.style.cursor = this.previousCursor;
+            this.handle.style.touchAction = this.previousTouchAction;
         }
         if (this.resizeHandle) {
             this.resizeHandle.removeEventListener('pointerdown', this.onResizeDown);
@@ -181,20 +213,54 @@ export class DraggableController {
         if (this.resizeHandleCorner) {
             this.resizeHandleCorner.removeEventListener('pointerdown', this.onCornerResizeDown);
         }
-        if (typeof window !== 'undefined') {
-            window.removeEventListener('resize', this.onResize);
-        }
+        this.win?.removeEventListener('resize', this.onResize);
         this.detachMoveListeners();
         this.detachResizeListeners();
         this.detachHeightResizeListeners();
         this.detachCornerResizeListeners();
+        this.releaseCapture(this.handle, this.activePointerId);
+        this.releaseCapture(this.resizeHandle, this.activeResizePointerId);
+        this.releaseCapture(this.resizeHandleY, this.activeHeightPointerId);
+        this.releaseCapture(this.resizeHandleCorner, this.activeCornerPointerId);
+        this.resizeHandle?.remove();
+        this.resizeHandleY?.remove();
+        this.resizeHandleCorner?.remove();
+        this.resizeHandle = this.resizeHandleY = this.resizeHandleCorner = null;
+        this.dragging =
+            this.resizing =
+                this.resizingHeight =
+                    this.resizingCorner =
+                        false;
+        this.moved = this.widthChanged = this.heightChanged = false;
+        this.activePointerId =
+            this.activeResizePointerId =
+                this.activeHeightPointerId =
+                    this.activeCornerPointerId =
+                        null;
+        this.sizeObserver?.disconnect();
+        this.sizeObserver = null;
         this.enabled = false;
     }
     /** Sets a new position (clamped) and persists it. */
     setPosition(p) {
+        if (!isPosition(p))
+            return;
         this.position = { x: p.x, y: p.y };
         this.applyPosition();
         this.savePosition();
+    }
+    /** Sets and persists the preferred width, adapting its rendered size to the viewport. */
+    setWidth(width) {
+        if (!Number.isFinite(width))
+            return;
+        this.width = this.clampWidth(width);
+        this.applyWidth();
+        this.reclampPosition();
+        this.storage.writeJSON(WIDTH_KEY, this.width);
+    }
+    /** Returns the preferred width (the rendered width can be smaller on narrow screens). */
+    getWidth() {
+        return this.width;
     }
     /** Returns the current position (copy). */
     getPosition() {
@@ -214,7 +280,7 @@ export class DraggableController {
         if (e.pointerType === 'mouse' && e.button !== 0) {
             return;
         }
-        if (!this.container) {
+        if (!this.container || this.isInteracting()) {
             return;
         }
         this.dragging = true;
@@ -236,6 +302,7 @@ export class DraggableController {
         this.handle?.addEventListener('pointermove', this.onPointerMove);
         this.handle?.addEventListener('pointerup', this.onPointerUp);
         this.handle?.addEventListener('pointercancel', this.onPointerUp);
+        this.handle?.addEventListener('lostpointercapture', this.onPointerUp);
         if (this.handle) {
             this.handle.style.cursor = 'move';
         }
@@ -279,7 +346,10 @@ export class DraggableController {
             // Persist the position only at the end of an actual drag.
             this.savePosition();
         }
-        // Note: `moved` stays true until the capture click, which consumes it.
+        // A cancelled/stolen capture has no following click to suppress.
+        if (e.type !== 'pointerup')
+            this.moved = false;
+        // Otherwise `moved` stays true until the capture click consumes it.
     }
     handleClickCapture(e) {
         // If the user dragged, we suppress the click that would otherwise
@@ -291,20 +361,19 @@ export class DraggableController {
         }
     }
     handleResize() {
-        // Re-clamp to stay within the viewport after a resize.
-        this.position = this.clamp(this.position);
-        this.applyPosition();
-        this.savePosition();
+        this.applyWidth();
+        this.reclampPosition();
     }
     // --- Width resize handling ----------------------------------------------
     handleResizeDown(e) {
         if (e.pointerType === 'mouse' && e.button !== 0) {
             return;
         }
-        if (!this.container) {
+        if (!this.container || this.isInteracting()) {
             return;
         }
         this.resizing = true;
+        this.widthChanged = false;
         this.activeResizePointerId = e.pointerId;
         this.startResizeX = e.clientX;
         this.startWidth = this.container.getBoundingClientRect().width;
@@ -317,6 +386,7 @@ export class DraggableController {
         this.resizeHandle?.addEventListener('pointermove', this.onResizeMove);
         this.resizeHandle?.addEventListener('pointerup', this.onResizeUp);
         this.resizeHandle?.addEventListener('pointercancel', this.onResizeUp);
+        this.resizeHandle?.addEventListener('lostpointercapture', this.onResizeUp);
         e.preventDefault();
         e.stopPropagation();
     }
@@ -327,8 +397,11 @@ export class DraggableController {
             return;
         }
         const dx = e.clientX - this.startResizeX;
+        if (dx === 0 && !this.widthChanged)
+            return;
+        this.widthChanged = true;
         this.width = this.clampWidth(this.startWidth + dx);
-        this.container.style.width = `${this.width}px`;
+        this.applyWidth();
         // The width changed: re-clamp the position within the viewport.
         this.applyPosition();
         e.preventDefault();
@@ -346,17 +419,21 @@ export class DraggableController {
         catch {
             // Ignore.
         }
-        this.storage.writeJSON(WIDTH_KEY, this.width);
+        if (this.widthChanged) {
+            this.storage.writeJSON(WIDTH_KEY, this.width);
+            this.savePosition();
+        }
     }
     // --- Height resize handling (updates the max-height) --------------------
     handleHeightResizeDown(e) {
         if (e.pointerType === 'mouse' && e.button !== 0) {
             return;
         }
-        if (!this.container) {
+        if (!this.container || this.isCollapsed() || this.isInteracting()) {
             return;
         }
         this.resizingHeight = true;
+        this.heightChanged = false;
         this.activeHeightPointerId = e.pointerId;
         this.startResizeY = e.clientY;
         // Start height = current rendered height of the panel.
@@ -371,6 +448,7 @@ export class DraggableController {
         this.resizeHandleY?.addEventListener('pointermove', this.onHeightResizeMove);
         this.resizeHandleY?.addEventListener('pointerup', this.onHeightResizeUp);
         this.resizeHandleY?.addEventListener('pointercancel', this.onHeightResizeUp);
+        this.resizeHandleY?.addEventListener('lostpointercapture', this.onHeightResizeUp);
         e.preventDefault();
         e.stopPropagation();
     }
@@ -379,10 +457,14 @@ export class DraggableController {
             return;
         }
         const dy = e.clientY - this.startResizeY;
+        if (dy === 0 && !this.heightChanged)
+            return;
+        this.heightChanged = true;
         this.currentHeightPx = this.clampHeight(this.startHeight + dy);
         // Apply the max-height in px on the root panel (pane.element): beyond the
         // cap the panel scrolls (see scroll.ts/styles.ts).
         applyMaxHeight(this.pane.element, `${this.currentHeightPx}px`);
+        this.applyPosition();
         e.preventDefault();
     }
     handleHeightResizeUp(e) {
@@ -399,8 +481,9 @@ export class DraggableController {
             // Ignore.
         }
         // Persist the max-height in px chosen by the user (wins over the default).
-        if (this.currentHeightPx > 0) {
+        if (this.heightChanged) {
             this.storage.writeJSON(MAXHEIGHT_KEY, `${this.currentHeightPx}px`);
+            this.savePosition();
         }
     }
     // --- CORNER resize handling (width + height together) -------------------
@@ -408,18 +491,18 @@ export class DraggableController {
         if (e.pointerType === 'mouse' && e.button !== 0) {
             return;
         }
-        if (!this.container) {
+        if (!this.container || this.isInteracting()) {
             return;
         }
         this.resizingCorner = true;
+        this.widthChanged = this.heightChanged = false;
         this.activeCornerPointerId = e.pointerId;
         this.startCornerX = e.clientX;
         this.startCornerY = e.clientY;
         const rect = this.container.getBoundingClientRect();
         this.startCornerWidth = rect.width;
         this.startCornerHeight = rect.height;
-        this.width = this.clampWidth(rect.width);
-        this.currentHeightPx = this.clampHeight(rect.height);
+        this.currentHeightPx = rect.height;
         try {
             this.resizeHandleCorner?.setPointerCapture(e.pointerId);
         }
@@ -429,6 +512,7 @@ export class DraggableController {
         this.resizeHandleCorner?.addEventListener('pointermove', this.onCornerResizeMove);
         this.resizeHandleCorner?.addEventListener('pointerup', this.onCornerResizeUp);
         this.resizeHandleCorner?.addEventListener('pointercancel', this.onCornerResizeUp);
+        this.resizeHandleCorner?.addEventListener('lostpointercapture', this.onCornerResizeUp);
         e.preventDefault();
         e.stopPropagation();
     }
@@ -440,12 +524,18 @@ export class DraggableController {
         }
         const dx = e.clientX - this.startCornerX;
         const dy = e.clientY - this.startCornerY;
-        // Width (like the right handle).
-        this.width = this.clampWidth(this.startCornerWidth + dx);
-        this.container.style.width = `${this.width}px`;
-        // Height -> max-height (like the bottom handle).
-        this.currentHeightPx = this.clampHeight(this.startCornerHeight + dy);
-        applyMaxHeight(this.pane.element, `${this.currentHeightPx}px`);
+        // Only change axes the gesture actually moved. A collapsed pane has no
+        // meaningful rendered content height, so its corner only resizes width.
+        if (dx !== 0 || this.widthChanged) {
+            this.widthChanged = true;
+            this.width = this.clampWidth(this.startCornerWidth + dx);
+            this.applyWidth();
+        }
+        if (!this.isCollapsed() && (dy !== 0 || this.heightChanged)) {
+            this.heightChanged = true;
+            this.currentHeightPx = this.clampHeight(this.startCornerHeight + dy);
+            applyMaxHeight(this.pane.element, `${this.currentHeightPx}px`);
+        }
         // The width changed: re-clamp the position within the viewport.
         this.applyPosition();
         e.preventDefault();
@@ -463,32 +553,78 @@ export class DraggableController {
         catch {
             // Ignore.
         }
-        // Persist both dimensions chosen by the user.
-        this.storage.writeJSON(WIDTH_KEY, this.width);
-        if (this.currentHeightPx > 0) {
+        if (this.widthChanged)
+            this.storage.writeJSON(WIDTH_KEY, this.width);
+        if (this.heightChanged) {
             this.storage.writeJSON(MAXHEIGHT_KEY, `${this.currentHeightPx}px`);
         }
+        if (this.widthChanged || this.heightChanged)
+            this.savePosition();
     }
     // --- Helpers ------------------------------------------------------------
+    isInteracting() {
+        return (this.dragging ||
+            this.resizing ||
+            this.resizingHeight ||
+            this.resizingCorner);
+    }
+    isCollapsed() {
+        const panel = this.pane.element;
+        return (panel.classList.contains('tp-rotv') &&
+            !panel.classList.contains('tp-rotv-expanded'));
+    }
+    releaseCapture(handle, pointerId) {
+        if (pointerId === null)
+            return;
+        try {
+            handle?.releasePointerCapture(pointerId);
+        }
+        catch {
+            // Capture may already have been released by the browser.
+        }
+    }
+    applyWidth() {
+        if (!this.container)
+            return;
+        const viewport = this.win?.innerWidth;
+        const rendered = this.clampEnabled && viewport !== undefined
+            ? Math.min(this.width, Math.max(0, viewport))
+            : this.width;
+        const width = `${rendered}px`;
+        if (this.container.style.width !== width) {
+            this.container.style.width = width;
+            this.pane.element.dispatchEvent(new Event('driftpane-layout'));
+        }
+    }
+    reclampPosition() {
+        const previous = this.position;
+        this.applyPosition();
+        if (previous.x !== this.position.x || previous.y !== this.position.y)
+            this.savePosition();
+    }
     detachMoveListeners() {
         this.handle?.removeEventListener('pointermove', this.onPointerMove);
         this.handle?.removeEventListener('pointerup', this.onPointerUp);
         this.handle?.removeEventListener('pointercancel', this.onPointerUp);
+        this.handle?.removeEventListener('lostpointercapture', this.onPointerUp);
     }
     detachResizeListeners() {
         this.resizeHandle?.removeEventListener('pointermove', this.onResizeMove);
         this.resizeHandle?.removeEventListener('pointerup', this.onResizeUp);
         this.resizeHandle?.removeEventListener('pointercancel', this.onResizeUp);
+        this.resizeHandle?.removeEventListener('lostpointercapture', this.onResizeUp);
     }
     detachHeightResizeListeners() {
         this.resizeHandleY?.removeEventListener('pointermove', this.onHeightResizeMove);
         this.resizeHandleY?.removeEventListener('pointerup', this.onHeightResizeUp);
         this.resizeHandleY?.removeEventListener('pointercancel', this.onHeightResizeUp);
+        this.resizeHandleY?.removeEventListener('lostpointercapture', this.onHeightResizeUp);
     }
     detachCornerResizeListeners() {
         this.resizeHandleCorner?.removeEventListener('pointermove', this.onCornerResizeMove);
         this.resizeHandleCorner?.removeEventListener('pointerup', this.onCornerResizeUp);
         this.resizeHandleCorner?.removeEventListener('pointercancel', this.onCornerResizeUp);
+        this.resizeHandleCorner?.removeEventListener('lostpointercapture', this.onCornerResizeUp);
     }
     /** Constrains the pane width between MIN_WIDTH and MAX_WIDTH. */
     clampWidth(w) {
@@ -496,7 +632,7 @@ export class DraggableController {
     }
     /** Constrains the panel height between MIN_HEIGHT and the viewport height. */
     clampHeight(h) {
-        const vh = typeof window !== 'undefined' ? window.innerHeight : h;
+        const vh = this.win?.innerHeight ?? h;
         return Math.min(vh, Math.max(MIN_HEIGHT, Math.round(h)));
     }
     /** Writes left/top on the container from the current position. */
@@ -506,8 +642,13 @@ export class DraggableController {
         }
         const clamped = this.clamp(this.position);
         this.position = clamped;
-        this.container.style.left = `${clamped.x}px`;
-        this.container.style.top = `${clamped.y}px`;
+        const left = `${clamped.x}px`;
+        const top = `${clamped.y}px`;
+        const changed = this.container.style.left !== left || this.container.style.top !== top;
+        this.container.style.left = left;
+        this.container.style.top = top;
+        if (changed)
+            this.pane.element.dispatchEvent(new Event('driftpane-layout'));
     }
     /** Keeps the position within the viewport edges (if enabled). */
     clamp(p) {
@@ -515,8 +656,8 @@ export class DraggableController {
             return { x: p.x, y: p.y };
         }
         const rect = this.container.getBoundingClientRect();
-        const vw = typeof window !== 'undefined' ? window.innerWidth : rect.width;
-        const vh = typeof window !== 'undefined' ? window.innerHeight : rect.height;
+        const vw = this.win?.innerWidth ?? rect.width;
+        const vh = this.win?.innerHeight ?? rect.height;
         const maxX = Math.max(0, vw - rect.width);
         const maxY = Math.max(0, vh - rect.height);
         return {

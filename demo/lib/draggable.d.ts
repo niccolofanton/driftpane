@@ -23,6 +23,7 @@ export interface DraggableOptions {
 }
 export declare class DraggableController {
     private readonly pane;
+    private readonly win;
     private readonly storage;
     private readonly clampEnabled;
     private readonly defaultPosition;
@@ -34,7 +35,13 @@ export declare class DraggableController {
     private resizeHandleY;
     private resizeHandleCorner;
     private position;
+    /** User-preferred width; viewport adaptation must not overwrite it. */
     private width;
+    private sizeObserver;
+    private previousCursor;
+    private previousTouchAction;
+    private widthChanged;
+    private heightChanged;
     private resizing;
     private activeResizePointerId;
     private startResizeX;
@@ -82,6 +89,10 @@ export declare class DraggableController {
     disable(): void;
     /** Sets a new position (clamped) and persists it. */
     setPosition(p: DriftpanePosition): void;
+    /** Sets and persists the preferred width, adapting its rendered size to the viewport. */
+    setWidth(width: number): void;
+    /** Returns the preferred width (the rendered width can be smaller on narrow screens). */
+    getWidth(): number;
     /** Returns the current position (copy). */
     getPosition(): DriftpanePosition;
     /** Returns the panel to the default position. */
@@ -102,6 +113,11 @@ export declare class DraggableController {
     private handleCornerResizeDown;
     private handleCornerResizeMove;
     private handleCornerResizeUp;
+    private isInteracting;
+    private isCollapsed;
+    private releaseCapture;
+    private applyWidth;
+    private reclampPosition;
     private detachMoveListeners;
     private detachResizeListeners;
     private detachHeightResizeListeners;

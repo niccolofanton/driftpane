@@ -5,12 +5,12 @@ import type { DriftpaneTheme } from './theme-controller.js';
  *
  * Tweakpane does not expose a strong public type for this state (internally it
  * is `BladeState`), so we model it as a generic object. The real shape is a tree
- * `{ disabled, hidden, expanded?, title?, binding?, children? }`.
+ * `{ disabled, hidden, expanded?, selected?, title?, binding?, children? }`.
  */
 export type SerializedState = Record<string, unknown>;
 /**
  * A single preset: a named snapshot of `pane.exportState()`, already "scoped",
- * i.e. without the preset manager folder (always the first child of the pane).
+ * without the actual preset manager folder or local folder/tab navigation.
  */
 export interface DriftpanePreset {
     /** Unique identifier (crypto.randomUUID with fallback). */
@@ -21,12 +21,12 @@ export interface DriftpanePreset {
     createdAt: number;
     /** Epoch ms of the last overwrite/rename. */
     updatedAt: number;
-    /** Scoped snapshot of exportState() (without the preset folder). */
+    /** Scoped snapshot without the manager, expansion or tab selection/visibility. */
     state: SerializedState;
     /**
      * true = CUSTOM preset created by the user (renamable/deletable, shown with a
-     * small icon in the selector). false/absent = DEFAULT preset provided by the
-     * app (not deletable). Legacy presets without the field are treated as custom.
+     * small icon in the selector). false = DEFAULT factory baseline (not
+     * deletable/overwritable). Legacy presets without the field are custom.
      */
     custom?: boolean;
 }
@@ -66,7 +66,7 @@ export interface DriftpaneShareEnvelope {
     n: string;
     /** True when this is a built-in/default preset (name-marker identity). */
     d: boolean;
-    /** Scoped, expanded-stripped pane state (values only). */
+    /** Scoped state without local folder/tab navigation; readonly values normalized. */
     s: SerializedState;
 }
 /**
@@ -90,19 +90,19 @@ export interface DriftpaneOptions {
      * coexist on the same origin. Default: 'default'.
      */
     storageNamespace?: string;
-    /** Debounce window (ms) for saving the state. Default: 300. */
+    /** Delay (ms) for separate state-save and URL-sync debounces. Default: 300. */
     debounceMs?: number;
     /** Enables dragging the panel from the title-bar. Default: true. */
     draggable?: boolean;
-    /** Enables the preset menu (folder always at the bottom). Default: true. */
+    /** Enables the preset menu, appended after existing controls at init. Default: true. */
     presetsEnabled?: boolean;
     /** Title of the preset folder. Default: 'Preset'. */
     presetFolderTitle?: string;
     /**
-     * Name of the "Default" preset auto-created when no default preset exists yet:
-     * it captures the INITIAL (factory) state of the pane and is the target of
-     * "Restore". It is NOT deletable nor overwritable (baseline). Default:
-     * 'Default'.
+     * Initial name of the factory baseline preset. Its state refreshes once per
+     * initialized session before restoring saved values, keeping its identity.
+     * User actions cannot delete or overwrite it. "Restore" re-applies the active
+     * preset, which may be this baseline or a custom preset. Default: 'Default'.
      */
     defaultPresetName?: string;
     /**
@@ -126,9 +126,10 @@ export interface DriftpaneOptions {
     showDeletePreset?: boolean;
     /**
      * Shows the "Export all" button inside the preset folder: it downloads a full
-     * backup of the namespace's persisted state (panel values/folds, position,
-     * width, max-height, theme AND every preset) as a single JSON file. The plain
-     * "Export" button instead exports only the selected preset, named after it.
+     * backup of current values/navigation, position, preferred width, max-height,
+     * theme and every preset. Restore with Import or `importAllJSON(raw)`; the
+     * receiver's factory Default is retained. The plain "Export" button exports
+     * only the selected preset, named after it.
      * Default: false (hidden).
      */
     showExportAll?: boolean;
@@ -150,15 +151,17 @@ export interface DriftpaneOptions {
     theme?: DriftpaneTheme;
     /**
      * Maximum height of the panel in `vh` units. When the content exceeds it, the
-     * entire panel becomes scrollable; the open/close animation is not altered. If
-     * omitted, the default is `calc(100dvh - 48px)` (a 24px safe zone top/bottom),
-     * always active so the panel never exceeds the viewport. Changeable at runtime
+     * content becomes scrollable. If omitted, the default is
+     * `calc(100dvh - 48px)` (a 24px safe zone top/bottom). The rendered cap also
+     * accounts for viewport height and the measured title bar. Changeable at runtime
      * with `driftpane.setMaxHeight(...)`.
      */
     maxHeightVh?: number;
     /**
      * Initial width of the panel in px (a "sensible" default measure). If the user
-     * has already resized it, the persisted width wins. Default: 280.
+     * has already resized it, the persisted width wins. With clampToViewport,
+     * rendered width also fits the viewport without replacing this preference.
+     * Default: 280.
      */
     width?: number;
     /**
@@ -207,7 +210,7 @@ export interface DriftpaneOptions {
 /**
  * Why `onStateApplied` fired.
  *
- * - `restore`        — the persisted state was applied on load.
+ * - `restore`        — persisted state was applied on load, or a backup restored.
  * - `preset`         — a preset was applied (menu or `applyPreset`).
  * - `share`          — an incoming shared link was applied as a live preview.
  * - `share-discard`  — a shared preview was rejected and the previous state

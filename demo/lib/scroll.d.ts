@@ -1,3 +1,5 @@
+/** A finite CSS length/expression usable inside the viewport cap's min(). */
+export declare function isMaxHeightValue(value: unknown): value is string;
 /**
  * Applies the height cap + scroll on the host (typically pane.element, i.e.
  * the root panel `.tp-rotv`). `value` is an already-formatted CSS length

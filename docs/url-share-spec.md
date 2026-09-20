@@ -1,198 +1,205 @@
 # Spec — URL config sharing ("a preset in a link")
 
-- **Status:** Implemented (specs frozen after grilling; shipped in `src/url-share.ts` + facade wiring, with tests)
+- **Status:** Implemented in `src/url-share.ts`, preset controllers and the facade; this document describes the current working tree.
 - **Owner:** @niccolofanton
-- **Origin:** Tweet — _"highly advocate for creating prototypes that store config state in their url… makes it easy to collab and iterate, just share a url! we spin up prototypes and ping them around as quick links."_
 
----
+## 1. Model and scope
 
-## 1. One-line model
+The URL carries the **active preset's identity and current live values**, including
+unsaved edits. Opening a link previews its configuration and offers Import,
+Overwrite or Discard. This is link-based sharing, not simultaneous collaboration.
 
-The URL carries **a preset with an identity**, kept in sync with the live state in realtime. Opening a link reconciles that preset against the local preset store (**import** / **overwrite**), with a key-path merge that tolerates **added/removed bindings** so collaborators iterating on a prototype can keep exchanging links (folder renames remain a known weak spot — see §6).
+Theme, panel position/size, folder expansion and selected tab pages stay local.
+The payload is not encrypted; query parameters can appear in server logs and,
+depending on referrer policy, referrer headers. Avoid sensitive configuration.
 
-This feature is a **new sharing/persistence channel layered on top of the existing preset + persistence stack**. It reuses the existing scoping, structure-signature guard, and serialization wherever possible.
+## 2. Defaults and timing
 
-## 2. Goals / non-goals
+| Setting | Behavior |
+|---|---|
+| `urlSync` | `true` by default; forces the preset menu on. |
+| `urlParamKey` | `'dp'`; full query key is `<prefix>:<storageNamespace>`. |
+| `debounceMs` | `300` by default; URL sync and localStorage use separate debounces with this delay. |
+| First write | Lazy: a value or preset-identity change schedules it; startup restore alone does not. |
+| Explicit copy | Copy link encodes and writes immediately, even before any edits. |
+| No menu | Set both `presetsEnabled: false` and `urlSync: false`. |
 
-**Goals**
-- Make the current config shareable as a plain URL, with no extra UI step ("just copy the address bar", plus a convenience "Copy link" button).
-- Treat a shared config as a first-class **preset** with stable identity, so re-sharing updates the same thing on the other side (the collaboration loop).
-- Stay **dependency-free** and consistent with the all-blades UI.
-- Degrade gracefully when the sender's and receiver's panes have drifted in structure.
+Preset saves, renames, overwrites and active-preset changes notify URL sync even
+when no binding value changes. Deduplication compares identity plus normalized
+state, so changing a preset's name or ID is significant.
 
-**Non-goals**
-- Real-time multi-user co-editing (no live presence/CRDT; sharing is link-based, pull-on-open).
-- Sharing view chrome (theme, panel position/size, folder open/closed state). Only **config values** travel.
-- Encryption / access control of shared links (see §10 privacy).
+## 3. Query and envelope formats
 
-## 3. Resolved decisions
+One parameter per pane namespace permits multiple panels on one page:
 
-| # | Topic | Decision |
-|---|-------|----------|
-| 1 | URL role | A preset with identity, **live-synced** (not pure on-demand). |
-| 2 | Identity | **Custom** preset → its **UUID**. **Built-in/default** preset (`custom: false`) → its **name as a marker** (not a UUID). While editing, the URL carries the **active preset's identity + the current live values** (even with unsaved edits). |
-| 3 | Open behavior | UUID present in store → **overwrite** prompt. UUID absent → **import** prompt. Name-marker → **always** create a new `"<name> (imported)"` preset; **never** overwrite a default. |
-| 4 | Payload | **Values only** — the preset state (scoped: without the preset folder; `expanded` stripped). No theme / position / folds. |
-| 5 | Location | **Namespaced query param** `?dp:<namespace>=<payload>`, preserving all other query params and the hash. |
-| 6 | Encoding | Native **`CompressionStream`** (deflate) + base64url, **zero-dependency**, with an uncompressed fallback for unsupported browsers. Versioned envelope. |
-| 7 | Prompt UX | **Inline blade** at the top of the preset folder (folder auto-expands): `[Import] [Overwrite] [Discard]`. |
-| 8 | Structure mismatch | **Exact structure match first** (`structureSignature`); if signatures differ → **merge by key**, where the key identity is the **folder-title path + `binding.key`** (with a fallback to the leaf key when it is globally unique). |
-| 9 | What gets stored after a merge | **Re-snapshot the local pane** after applying the merged values, and store that (a first-class native preset), keeping the shared identity. |
-| 10 | Sync timing | **Lazy** — starts at the first change. `history.replaceState`. Reuses the existing **debounced save** (default 300 ms). Suspended while an incoming link is awaiting the prompt. |
-| 11 | API & default | **On by default**, disableable (`urlSync`, default `true`); optional `urlParamKey`; a **"Copy link"** button in the preset folder. |
-| 12 | Preset dependency | `urlSync` **forces presets on** (overrides `presetsEnabled: false`). To get a pane with no preset folder, the consumer must disable **both** `presetsEnabled` and `urlSync`. |
-| 13 | Open = live preview | Opening a link **applies the shared config immediately** (reversible). A `preApply` snapshot is captured first; **both URL sync and persistence writes are paused** until the user resolves the prompt, so the preview stays in-memory. `Discard` restores `preApply`. |
-
-## 4. Data formats
-
-### 4.1 Query parameter
-
-```
+```text
 ?dp:<storageNamespace>=<encoded-envelope>
 ```
 
-- One param per pane namespace, so multiple panes on one origin coexist (`dp:default`, `dp:editor`, …).
-- All other query params and the URL hash are preserved on every write.
-- The param key prefix is configurable via `urlParamKey` (default `dp`).
-
-### 4.2 Share envelope (before encoding)
+Writes use `history.replaceState` and preserve other query parameters and the
+hash. Building a copied URL preserves sibling panels' share parameters too.
 
 ```jsonc
 {
-  "f": "driftpane-share", // format tag
-  "v": 1,                 // envelope version
-  "id": "<uuid>",         // present for CUSTOM presets
-  "n": "<name>",          // human name (used for the marker case and prompt text)
-  "d": false,             // true => default/built-in marker case (identity is the name, not id)
-  "s": { /* scoped, expanded-stripped BladeState (values only) */ }
+  "f": "driftpane-share",
+  "v": 1,
+  "id": "<uuid>", // custom presets only
+  "n": "<name>",
+  "d": false,     // true means built-in/default name-marker identity
+  "s": { /* scoped state without local navigation */ }
 }
 ```
 
-- For a **custom** preset: `id` set, `d: false`. Identity = `id`.
-- For a **default** preset: `id` omitted, `d: true`. Identity = `n` (name marker).
+- Custom presets carry their UUID and `d: false`.
+- Default/built-in presets carry a name marker with `d: true`; no UUID is needed.
+- State excludes the manager folder, `expanded` flags, tab-page `selected` and
+  derived `hidden` flags. Ordinary controls retain their own visibility fields.
+- Readonly binding values are normalized to `null`, retaining the tree shape.
+  They do not become shared editable values.
 
-### 4.3 Encoding pipeline
+## 4. Encoding
 
-1. `JSON.stringify(envelope)`
-2. `CompressionStream('deflate')` → bytes (async). On unsupported browsers, skip.
-3. base64url of the bytes; prefix a 1-char codec tag (`c` = compressed, `u` = uncompressed) so decode is unambiguous.
-4. Place as the param value.
+1. Serialize the envelope with `JSON.stringify`.
+2. Compress asynchronously with `CompressionStream('deflate')` when available;
+   otherwise use uncompressed bytes.
+3. Encode with base64url and prepend a codec tag: `c` compressed, `u` uncompressed.
+4. Store as the namespaced parameter value.
 
-Decode is the inverse, keyed off the codec tag.
+Decode uses the tag to reverse this process. A compressed payload requires
+`DecompressionStream` on the receiving browser; unsupported or malformed input
+is ignored. An uncompressed payload does not require compression support.
 
-## 5. Flows
+Each write has a sequence token. Stale encodes cannot replace a newer write;
+clear, suspend and disposal also prevent outdated writes from updating the URL.
 
-### 5.1 Write (live-sync, sender side)
+## 5. Sender flow
 
-Triggered on the **first** change and every debounced save thereafter (reuses the persistence debounce):
+A value change or preset-store notification reaches `UrlShareController`:
 
-1. `pane.exportState()` → `stripManagerChild` (drop preset folder) → `stripExpanded` (values only). _(Same as `PresetController.snapshot()`.)_
-2. Resolve the **active preset's identity**: custom → `{id}`; default → `{name marker}`; build the envelope (§4.2).
-3. Encode (§4.3) — **async, latest-wins**: tag each encode with a sequence number and drop stale results so a slow compression cannot clobber a newer one.
-4. `history.replaceState` the param onto the current URL, preserving everything else.
+1. Export the live state and remove the actual manager folder by its current index.
+2. Strip local navigation and normalize readonly monitor values.
+3. Compare the normalized state **and active identity** to the last snapshot.
+4. If changed, schedule the independent URL debounce.
+5. Build and encode the envelope, then replace the parameter if this is still
+   the latest permitted write.
 
-The **"Copy link"** button is an explicit trigger: it serializes the current state into the URL **even at defaults / before any change** (bypasses lazy), **awaits the async encode**, then copies the resulting URL to the clipboard. The param remains in the address bar afterward.
+Readonly-monitor changes alone do not repeatedly reset the timer. Persistence
+uses equivalent monitor-noise deduplication for scheduling, while saving the
+full scoped live state at flush time.
 
-### 5.2 Read (open a link, receiver side)
+`copyShareLink()` bypasses the debounce, writes the parameter, awaits encoding
+and copies the resulting URL. `shareUrl()` builds a URL without changing the
+address bar. Without an active identity, these paths return the current URL
+without adding a payload.
 
-On load:
+## 6. Receiver flow
 
-1. URL sync starts **suspended** (the controller is constructed paused); programmatic restores/applies must never count as the "first change" that arms lazy sync.
-2. Persistence restores local state as usual (`PersistenceController.restore()`), pane refreshes — **no URL write happens** because sync is suspended.
-3. Read the `dp:<ns>` param; if absent, resume sync and stop.
-4. Decode the envelope (async); on failure apply the §10 versioning rules (silent ignore, or a one-time warn for a too-new `v`), resume sync, and stop.
-5. Reconcile by identity → resolved action:
-   - `d: true` (name marker) → **import** as `"<name> (imported)"` (idempotent by content, §10).
-   - `id` present and **in store** → **overwrite** that preset.
-   - `id` present and **absent** → **import** (preserving `id`).
-6. Capture `preApply = pane.exportState()` (full live state) for reverting.
-7. **Apply the shared config immediately as a preview** — positional if `structureSignature` matches (re-insert preset folder via `mergeManagerChild`, overlay current `expanded` via `overlayExpanded`, then `importState`), otherwise **merge-by-path** (§6); then `refresh()`. **Pause both URL sync and persistence writes** for the whole prompt window, so the preview stays in-memory only.
-8. Render the inline blade prompt (§7) with `[Import]`/`[Overwrite]` (as resolved) and `[Discard]`.
-9. On **Import/Overwrite**: keep the preview, store the preset (re-snapshot the local scoped state if it came through merge-by-path), set it active, persist the store; resume persistence + sync (which rewrites the URL with the now-active identity).
-10. On **Discard**: re-import `preApply`, `refresh()`, resume persistence + sync; the store is untouched (next change writes the local config to the URL).
+1. Restore local persistence and refresh the pane before attaching URL sync.
+2. If an incoming parameter exists, suspend URL sync and decode asynchronously.
+   If the Driftpane instance is disposed during decode, stop without applying it.
+3. Ignore invalid input, resuming sync. If the incoming normalized state already
+   equals the local state, skip the prompt and resume sync.
+4. Resolve the identity: a matching **custom** UUID offers Overwrite; an unknown
+   UUID or default marker offers Import. A default baseline is never overwritten.
+5. Pause persistence, capture the full `preApply` snapshot, and apply the preview:
+   positional import for matching structures, otherwise the value merge below.
+   Preserve local navigation and synchronize the tab selection model after import.
+6. Refresh and emit `onStateApplied('share')`. Show the prompt at the top of the
+   preset folder and expand that folder. Preview values remain unpersisted while
+   the prompt is pending.
+7. **Import/Overwrite:** snapshot the preview into a native local preset, activate
+   it, save accepted state, resume persistence/sync, and restamp the URL.
+8. **Discard:** restore `preApply`, refresh, emit `onStateApplied('share-discard')`,
+   remove the incoming parameter, and resume persistence/sync. The preset store
+   is unchanged.
 
-## 6. Merge-by-path algorithm (structure-mismatch path)
+An unsuccessful preview import rolls back the captured pane state and resumes
+the controllers without showing the acceptance prompt.
 
-Used only when `structureSignature` differs.
+## 7. Structure mismatch and identity reconciliation
 
-- Build, for both the incoming state and the live pane, a map: **key = path of folder/tab titles from root + `binding.key`** → value.
-- For each path present in **both**, write the incoming value onto the live binding.
-- Paths only in the incoming state (binding the receiver doesn't have) are **dropped**.
-- Paths only in the live pane keep their current value.
-- **Fallback:** if a path has no exact match but the leaf `binding.key` is **globally unique** in the live pane, match on that key alone. If ambiguous, skip.
-- **Known limitation:** the path includes folder titles, so a **renamed folder** defeats both exact match and path match for its bindings; only the unique-leaf-key fallback recovers them. Renaming a folder is therefore the main thing that silently breaks a shared link.
-- Non-binding blades (buttons, monitors, separators) carry no value and are ignored.
-- After applying, **re-snapshot** the live scoped state (`snapshot()`) and store it under the shared identity → the imported preset becomes structurally native for future positional applies.
+Structure signatures include folder/tab titles, child order, binding keys,
+labels and readonly status. On mismatch, values are merged into the **live**
+structure rather than importing an incompatible tree positionally:
 
-## 7. UI
+- Exact identity is the folder/tab-title path plus `binding.key`.
+- Values with matching paths are copied; bindings missing on either side do
+  not replace unrelated controls.
+- A leaf key can be used as a fallback when it is globally unique on both sides.
+  Ambiguous matches are skipped.
+- Readonly bindings are excluded from the editable-value merge. Non-binding
+  blades retain the live structure.
+- Renamed folders can use the unique-key fallback; repeated keys without an
+  unambiguous path cannot be recovered this way.
+- Accepting the preview stores a fresh local snapshot so future preset applies
+  use the receiving pane's structure.
 
-Inside the existing preset folder (which `urlSync` guarantees is mounted):
+Unknown custom UUIDs are retained on import. Default-marker imports deduplicate
+by serialized state: if an equivalent preset exists it is activated, regardless
+of its name. Otherwise a new custom preset is named `<name> (imported)`, with
+`(imported 2)`, `(imported 3)`, etc. on name collisions. They do not replace the
+receiver's factory Default.
 
-- **Incoming-link prompt** — a temporary section pinned to the top, shown when a valid `dp:` param is detected on load. By then the shared config is **already applied as a live preview** (§5.2). Text: `Shared preset "<name>"` plus context (`already in your presets — overwrite?` / `import as new?` / `from a different pane — values merged` / `overwriting with possibly-unsaved values`). Buttons: `[Import]`/`[Overwrite]` (as resolved) to keep + save, and `[Discard]` to revert to your previous state. The folder auto-expands so it cannot be missed. The section is removed after the user acts.
-- **"Copy link" button** — always present when `urlSync` is on. Serializes current state into the URL and copies it.
-
-## 8. Public API (additions to `DriftpaneOptions`)
+## 8. Public API and UI
 
 ```ts
-/** Enable URL config sharing (live-synced shareable link). Default: true.
- *  Forces the preset menu on (the share UI lives in the preset folder). */
-urlSync?: boolean;
+interface DriftpaneOptions {
+  urlSync?: boolean;    // default true; forces the preset menu on
+  urlParamKey?: string; // default 'dp'
+  debounceMs?: number;  // default 300; separate storage/URL debounces
+}
 
-/** Prefix for the namespaced query param (`<prefix>:<storageNamespace>`).
- *  Default: 'dp'. */
-urlParamKey?: string;
+// Methods on the returned Driftpane instance:
+const url: string = await panel.shareUrl();
+const copiedUrl: string = await panel.copyShareLink();
+panel.clearShareUrl();
 ```
 
-Programmatic surface (tentative, to confirm in PRD):
-- `driftpane.copyShareLink(): Promise<string>` — build + copy + return the URL.
-- `driftpane.shareUrl(): string` — build the URL without copying.
-- `driftpane.clearShareUrl(): void` — remove our param via `replaceState`, preserving the rest (the v1 "stop sharing").
+- `shareUrl(): Promise<string>` builds the current share URL without writing it.
+- `copyShareLink(): Promise<string>` writes, attempts clipboard copy and returns
+  the URL. A select-and-copy fallback is used when the Clipboard API is unavailable.
+- `clearShareUrl(): void` removes this panel's parameter, cancels its queued
+  debounce and invalidates in-flight encodes. A subsequent value or identity
+  change may create another parameter; clear is not a permanent disable switch.
 
-## 9. Implementation map (existing modules)
+With `urlSync: false`, share methods return the current URL and the controller
+neither reads nor synchronizes a share parameter.
 
-- **New `src/url-share.ts`** (`UrlShareController`): envelope build/parse, encode/decode (CompressionStream + fallback), read/write the namespaced query param with preserve-everything-else, async latest-wins sequencing, suspend/resume.
-- **`src/state-scope.ts`**: add a **merge-by-path** function next to `structureSignature` / `mergeManagerChild` / `overlayExpanded`.
-- **`src/presets.ts`**: identity-based reconcile (uuid / name marker), import/overwrite, re-snapshot-after-merge, `"<name> (imported)"` naming.
-- **`src/preset-menu.ts`**: inline prompt section + "Copy link" button + auto-expand.
-- **`src/driftpane.ts`**: orchestration — wire sync to the persistence debounced save + active-preset identity; load-time decode + prompt; force presets on when `urlSync`.
-- **`src/types.ts`**: `urlSync`, `urlParamKey`.
-- **`src/persistence.ts`**: add `pause()`/`resume()` (a `paused` flag short-circuiting `scheduleSave`/`saveNow`, symmetric to the existing `disposed`) so the load-time preview window writes nothing to localStorage.
-- **`src/storage.ts`**: unchanged (URL is a separate channel from localStorage).
+The preset folder contains **Copy link** when URL sync is enabled. Incoming
+preview cards offer **Import** or **Overwrite**, plus **Discard**. Folder
+expansion and card insertion are local UI changes.
 
-## 10. Edge cases & handling
+## 9. Validation and operational limits
 
-- **Privacy:** the param lands in **referer headers and server logs** (query, not hash). Document as a caveat: fine for prototype config, not for sensitive values. The payload is **not encrypted**.
-- **Over-long URLs:** soft threshold **2000 chars on the encoded param value**; beyond it → `console.warn` **once per session** and **write anyway** (never truncate — it would corrupt the payload). A realistic ~40-binding pane lands near this after compression, so it is a real case. A configurable `urlMaxLength?` is deferred.
-- **Duplicate `"<name> (imported)"`:** import is **idempotent by content** — if a preset with the same base name **and** identical `state` (`JSON.stringify`, as `isModified()`) already exists, activate it instead of duplicating. Otherwise create a numbered name: `"<name> (imported)"`, then `"(imported 2)"`, `"(imported 3)"`, … (presets currently have no name dedup, so this is the first such rule).
-- **Overwrite with unsaved edits:** because the URL carries live (possibly unsaved) values under the active preset's identity, an `Overwrite` replaces the receiver's saved preset with the sender's current (maybe unsaved) state. This is intended (the iteration loop) but should be surfaced in the prompt copy.
-- **Stop sharing:** v1 ships **only** a programmatic `driftpane.clearShareUrl()` (removes our param via `replaceState`, preserving the rest). No UI button — a "pause for the session" toggle is ambiguous under the live+lazy model (the next change rewrites the URL) and is deferred.
-- **Envelope versioning (defensive, mirrors `storage.ts`):** `f !== "driftpane-share"` → ignore silently (could be another tool's param). Decode/parse failure or invalid `s` → ignore silently (optional `console.debug`). `v` **higher** than supported → ignore + **one-time `console.warn`** ("this link was created with a newer driftpane — update to open it"). The URL path **never throws to the user**. Future lower `v` → migrate when defined, else best-effort of known fields.
-- **`importState` requires `expanded`:** the payload strips it, so the apply path must overlay the current `expanded` (`overlayExpanded`) before `importState`, exactly as the preset-apply path already does.
-- **No active preset (`activeId === null`):** define a fallback identity — treat as the Default name-marker, or skip writing — so live-sync always has something to stamp the URL with.
-- **Clipboard:** `navigator.clipboard` needs a secure context (https/localhost). Provide a fallback (select-and-copy) or disable "Copy link" gracefully on insecure origins.
-- **Multi-namespace "Copy link":** the copied URL is the whole address, including any sibling pane's `dp:` params — sharing one pane also shares the others' state. Acceptable, but note it.
-- **Host router interaction:** an SPA host that rewrites its own URL on navigation may drop our param (re-added on the next save); our `replaceState` and the host router can race.
-- **Readonly monitors (continuous `change` noise):** readonly bindings (graphs, fps, ...) emit a root `change` event on (almost) every frame. A plain trailing-edge debounce would be perpetually reset and never write, so the URL would never update during animation. The fix: the shared snapshot is run through `stripReadonly` (readonly values → `null`, structure kept) and the change handler **dedupes** against the last snapshot — monitor noise leaves the normalized snapshot identical, so only real user edits arm the write. This also keeps monitor readouts out of the shared link. (The same noise blocks persistence's debounce too, which still saves via its `pagehide`/`visibilitychange` flush.)
-- **Self-skip:** opening a link whose (readonly-stripped) state equals the current local state — e.g. your OWN live-synced URL on reload — does not prompt; sync just resumes. So the live URL never re-prompts you to import your own config.
-- **Testing note:** `CompressionStream` is present in the project's Node (v24) and jsdom does not strip Node globals, so it is very likely available under vitest+jsdom — confirm with one test; otherwise exercise the uncompressed fallback. Not a blocker.
+- Wrong format tags, invalid state shapes, or decode/parse failures are ignored.
+  A future envelope version is ignored with a once-per-controller warning.
+- An encoded parameter over 2,000 characters triggers a warning once per
+  controller and is still written; it is not truncated.
+- Copying one panel's URL includes any sibling panels' parameters already there.
+- An SPA router may remove the parameter; a later value or identity change can
+  recreate it. URL writes preserve unrelated parameters at the time of writing.
+- Disposing a panel cancels queued writes, rejects completed stale encodes and
+  prevents late incoming-decode results from applying state.
 
-## 11. Acceptance criteria
+## 10. Implementation and verification
 
-1. With `urlSync` on, changing a value updates `?dp:<ns>=` via `replaceState` (after the debounce window; encode is async), preserving other query params and the hash.
-2. No param is written until the first change (lazy); "Copy link" writes/copies on demand even at defaults.
-3. Opening any valid link **applies the shared config immediately as a preview**, with URL sync **and persistence paused**; closing the tab without choosing persists nothing.
-4. Opening a link whose UUID is **not** in the store shows an **Import** prompt; accepting adds + activates the preset and persists it.
-5. Opening a link whose UUID **is** in the store shows an **Overwrite** prompt; accepting replaces that preset's state.
-6. Opening a default-marker link always offers **Import** as `"<name> (imported)"` and never overwrites a default.
-7. Re-opening the **same** link is idempotent: an identical (name + state) preset is **activated, not duplicated**; otherwise the new one gets a numbered `"(imported N)"` name.
-8. Opening a link from a structurally **different** pane applies matching values by folder-path+key, drops non-matching ones, and stores a re-snapshotted native preset.
-9. `Discard` reverts to the pre-open state (re-imports the `preApply` snapshot), leaves the store untouched, and resumes sync + persistence.
-10. An encoded value over the soft threshold (2000 chars) logs a one-time `console.warn` and is still written.
-11. A link with an unsupported envelope `v` leaves the store untouched and logs a one-time warning; a wrong `f` or corrupt payload is ignored silently.
-12. With an unsupported `CompressionStream`, links still encode/decode via the uncompressed fallback.
-13. Setting `presetsEnabled: false` while `urlSync` is on still mounts the preset folder (forced on); setting both to false removes it.
-14. Disabling `urlSync` writes nothing to the URL and reads nothing from it.
+| Module | Responsibility |
+|---|---|
+| `url-share.ts` | Encode/decode, parameter preservation, write sequencing, debounce, clear/suspend/resume. |
+| `state-scope.ts` | Manager scoping, structure signatures, navigation overlays, tab synchronization and value merge. |
+| `presets.ts` | Active identity, store notifications, reconciliation and import naming. |
+| `preset-menu.ts` | Incoming card, Copy link and active selector synchronization. |
+| `driftpane.ts` | Restore ordering, incoming preview, lifecycle guards and accept/discard orchestration. |
+| `persistence.ts` | Separate debounced storage, preview pause/resume and monitor-noise filtering. |
 
-## 12. Release note
+Tests cover encoding, identity-only changes, stale write cancellation,
+preset reconciliation, preview/accept/discard, disposal during decode,
+navigation preservation and monitor-noise handling. Real Tweakpane regressions
+exercise behavior the lightweight pane double cannot represent.
 
-Default-on behavior that **mutates the host app's URL** and **forces the preset folder on**. This is a behavior change on upgrade → ship as a **major version** with a prominent CHANGELOG entry and a migration note (`urlSync: false` to opt out).
+## 11. Migration note
+
+URL sharing is **on by default**: it can modify the host page's query string and
+forces the preset folder on. Set `urlSync: false` to opt out of sharing; also set
+`presetsEnabled: false` if no preset folder is wanted. This note describes current
+behavior and does not assign a new published version or release date.

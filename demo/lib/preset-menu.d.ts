@@ -1,4 +1,5 @@
 import { PresetController } from './presets.js';
+import { SerializedState } from './types.js';
 /** Tweakpane button (minimal) with element access for icons/layout. */
 export interface ButtonLike {
     on(ev: 'click', handler: () => void): unknown;
@@ -28,6 +29,8 @@ export interface FolderLike {
 export interface PaneLike {
     addBlade(params: Record<string, unknown>): unknown;
     element: HTMLElement;
+    children?: readonly unknown[];
+    exportState?(): SerializedState;
 }
 /**
  * Minimal (duck-typed) API of the theme controller, so the menu does not depend
@@ -36,6 +39,7 @@ export interface PaneLike {
 export interface ThemeControllerLike {
     get(): 'auto' | 'light' | 'dark';
     set(theme: 'auto' | 'light' | 'dark'): void;
+    subscribe?(listener: () => void): () => void;
 }
 export interface PresetMenuOptions {
     folderTitle: string;
@@ -59,6 +63,8 @@ export interface PresetMenuOptions {
         filename: string;
         content: string;
     };
+    /** Restore an entire namespace backup rather than importing it as a preset. */
+    onImportBackup?: (raw: string) => void;
     /**
      * Optional callback for the "Copy link" button (URL sharing). When absent, the
      * button is hidden. Typically builds + copies the share URL.
@@ -72,8 +78,13 @@ export declare class PresetMenu {
     private folder;
     private listBlade;
     private fileInput;
+    private fileReader;
+    private disposed;
     /** True while refreshList() writes the selector value programmatically. */
     private syncingList;
+    private unsubscribePresets;
+    private unsubscribeTheme;
+    private managerIndexAtMount;
     private saveChangesBtn;
     private revertBtn;
     private deleteBtn;
@@ -84,6 +95,8 @@ export declare class PresetMenu {
      * @returns the created FolderLike.
      */
     mount(): FolderLike;
+    /** Locate the actual mounted manager even after consumers add more controls. */
+    getManagerIndex(): number;
     /**
      * Rebuilds the selector options when the preset list changes.
      * Also updates the selected value to the current activeId.
@@ -168,6 +181,7 @@ export declare class PresetMenu {
      */
     private confirm;
     private createFileInput;
+    private cancelFileRead;
     private importFromPrompt;
     private applyImport;
     private downloadFile;

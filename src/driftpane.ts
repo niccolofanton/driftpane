@@ -7,28 +7,28 @@
 //  4) preset menu (save/apply/list/export/import)                 [presets + menu]
 //  5) light/dark/auto theme (skin), persisted                     [theme]
 //  6) maximum height (vh) with scrollable content                 [scroll]
+//  7) shareable configuration links                              [url-share]
 //
 // Initialization order (important):
 //  a) inject CSS;
 //  b) build the ThemeController -> sets data-theme on pane.element (so the
 //     preset menu "Theme" selector can use it already at mount);
-//  c) mount the PresetMenu -> the preset folder is APPENDED AT THE BOTTOM, so it
-//     is the last child of the pane. State/preset scoping therefore uses a
-//     managerChildIndex computed as "last index" (lazy resolver: reads
-//     exportState at use time, always after the mount);
-//  d) build PersistenceController and RESTORE the saved state (the pane already
-//     has the preset folder as its last child, so positional merge is valid);
-//  e) enable the DraggableController (wraps pane.element in the fixed container);
-//  f) apply the height cap to the root panel (default calc(100dvh - 48px)).
+//  c) mount the PresetMenu; resolve its position by API identity, including
+//     after controls are added or reordered;
+//  d) build PersistenceController and restore the scoped state;
+//  e) build DraggableController, apply the height cap, then enable dragging so
+//     the initial clamp measures the capped panel;
+//  f) attach URL sync and resolve any incoming shared configuration.
 
 import {DraggableController} from './draggable.js';
 import {PersistenceController} from './persistence.js';
 import {PresetMenu} from './preset-menu.js';
 import {PresetController} from './presets.js';
-import {applyMaxHeight, clearMaxHeight} from './scroll.js';
+import {applyMaxHeight, clearMaxHeight, isMaxHeightValue} from './scroll.js';
 import {
 	buildSharedImport,
-	childrenCount,
+	importPaneState,
+	mergeManagerChild,
 	stripManagerChild,
 	stripReadonly,
 	structureSignature,
@@ -40,6 +40,7 @@ import {
 	DriftpaneApplyReason,
 	DriftpaneOptions,
 	DriftpanePosition,
+	SerializedState,
 } from './types.js';
 import {UrlShareController} from './url-share.js';
 
@@ -110,12 +111,15 @@ export class Driftpane {
 	private readonly draggableEnabled: boolean;
 	/** URL sharing controller, or null when `urlSync` is disabled. */
 	private readonly urlShare: UrlShareController | null;
-	/** Resolver for the preset folder index (last child), shared by all features. */
+	/** Resolver for the actual preset folder index, shared by all features. */
 	private readonly managerChildIndex: number | (() => number);
 	/** Host of the height cap (the root panel, = pane.element). */
 	private readonly maxHeightHost: HTMLElement;
 	/** Consumer hook fired after every state application (see DriftpaneOptions). */
 	private readonly onStateApplied?: (reason: DriftpaneApplyReason) => void;
+	private disposed = false;
+	private sharePreviewActive = false;
+	private unsubscribePresets?: () => void;
 
 	constructor(pane: PaneLike, opts?: DriftpaneOptions) {
 		const options = {...DEFAULTS, ...(opts ?? {})};
@@ -142,21 +146,22 @@ export class Driftpane {
 			initial: options.theme,
 		});
 
-		// The preset folder is the LAST child of the pane (see preset-menu). The
-		// scoping must therefore exclude the last index. We use a lazy resolver
-		// (`() => last index`) instead of a constant: it is called only by the
-		// controller methods (apply/save/restore), always AFTER the mount, when
-		// exportState already includes the preset folder at the end. If presets are
-		// disabled there is no manager folder: index -1 (nothing is excluded).
+		// Resolve the actual manager by API identity, including after user controls
+		// are added, removed or reordered at runtime.
 		this.managerChildIndex = this.presetsEnabled
-			? (): number => childrenCount(this.pane.exportState()) - 1
+			? (): number => this.presetMenu?.getManagerIndex() ?? -1
 			: -1;
 
 		// The PresetController is also needed by the menu: we always create it (it
 		// is lightweight), but we mount the UI only if presetsEnabled.
-		this.presets = new PresetController(pane, this.storage, {
-			managerChildIndex: this.managerChildIndex,
-		});
+		try {
+			this.presets = new PresetController(pane, this.storage, {
+				managerChildIndex: this.managerChildIndex,
+			});
+		} catch (error) {
+			this.theme.dispose();
+			throw error;
+		}
 
 		// (c) Mount the preset menu: the preset folder is appended at the bottom.
 		// The "Theme" selector is added at the top of the folder by passing the
@@ -180,6 +185,7 @@ export class Driftpane {
 					: undefined,
 				themeController: options.showThemeControl ? this.theme : undefined,
 				showDeletePreset: options.showDeletePreset,
+				onImportBackup: (raw) => this.importAllJSON(raw),
 				onExportAll: options.showExportAll
 					? () => ({
 							filename: `driftpane-${options.storageNamespace}-backup.json`,
@@ -195,7 +201,7 @@ export class Driftpane {
 			// Ensures a "Default" preset (non-deletable baseline) by capturing the
 			// FACTORY state: it must be done AFTER the mount (so the scoping excludes
 			// the preset folder) and BEFORE the restore (so it captures the defaults,
-			// not the saved state). It is the target of "Restore".
+			// not the saved state). "Restore" reapplies whichever preset is active.
 			this.presets.ensureDefault(options.defaultPresetName);
 		} else {
 			this.presetMenu = null;
@@ -227,9 +233,6 @@ export class Driftpane {
 			resizableWidth: options.resizableWidth,
 			resizableHeight: options.resizableHeight,
 		});
-		if (this.draggableEnabled) {
-			this.draggable.enable();
-		}
 
 		// (f) Height cap: ALWAYS active, so the panel never exceeds the viewport
 		// and scrolls beyond the cap. Priority: user-persisted max-height (resize) >
@@ -240,13 +243,19 @@ export class Driftpane {
 			MAXHEIGHT_KEY,
 			null,
 		);
-		const initialMaxHeight =
-			typeof persistedMaxHeight === 'string' && persistedMaxHeight.trim() !== ''
-				? persistedMaxHeight
-				: typeof options.maxHeightVh === 'number'
-					? `${options.maxHeightVh}vh`
-					: DEFAULT_MAX_HEIGHT;
+		const initialMaxHeight = isMaxHeightValue(persistedMaxHeight)
+			? persistedMaxHeight
+			: typeof options.maxHeightVh === 'number' &&
+				  Number.isFinite(options.maxHeightVh) &&
+				  options.maxHeightVh > 0
+				? `${options.maxHeightVh}vh`
+				: DEFAULT_MAX_HEIGHT;
 		applyMaxHeight(this.maxHeightHost, initialMaxHeight);
+		// Measure only after the cap is applied; natural content height can be
+		// much taller than the viewport and would incorrectly reset the position.
+		if (this.draggableEnabled) {
+			this.draggable.enable();
+		}
 
 		// (g) URL sharing: live-sync the active config into a namespaced query param
 		// and reconcile an incoming shared link (preview + prompt). Built LAST so the
@@ -262,6 +271,9 @@ export class Driftpane {
 				getIdentity: () => this.presets.activeIdentity(),
 			});
 			this.urlShare.attach();
+			this.unsubscribePresets = this.presets.subscribe(() =>
+				this.urlShare?.syncIdentity(),
+			);
 			if (this.urlShare.hasIncomingParam()) {
 				// Keep sync suspended until the incoming prompt is resolved.
 				this.urlShare.suspend();
@@ -286,6 +298,7 @@ export class Driftpane {
 			return;
 		}
 		const css = typeof value === 'number' ? `${value}vh` : value;
+		if (!isMaxHeightValue(css)) throw new Error('Invalid maximum height');
 		applyMaxHeight(this.maxHeightHost, css);
 		this.storage.writeJSON(MAXHEIGHT_KEY, css);
 	}
@@ -293,9 +306,11 @@ export class Driftpane {
 	/**
 	 * Serializes a FULL backup of the namespace's persisted state into a versioned
 	 * JSON envelope: panel values/folds (`state`), drag `position`, `width`,
-	 * `maxHeight`, `theme` and the whole `presets` store. Missing keys are omitted.
+	 * `maxHeight`, `theme` and the whole `presets` store. Unstored settings fall
+	 * back to the current controllers, so a fresh panel can also be backed up.
 	 */
 	public exportAllJSON(): string {
+		this.persistence.saveNow();
 		const suffixes = [
 			'state',
 			'position',
@@ -311,6 +326,21 @@ export class Driftpane {
 				data[suffix] = value;
 			}
 		}
+		data['state'] ??= stripManagerChild(
+			this.pane.exportState(),
+			this.resolveManagerIndex(),
+		);
+		data['position'] ??= this.draggable.getPosition();
+		data['width'] ??= this.draggable.getWidth();
+		data['theme'] ??= this.theme.get();
+		data['maxHeight'] ??=
+			this.maxHeightHost.style.getPropertyValue('--dp-max-height');
+		const collection = JSON.parse(this.presets.exportJSON());
+		data['presets'] ??= {
+			version: 1,
+			activeId: collection.active,
+			presets: collection.presets,
+		};
 		const envelope = {
 			format: 'driftpane-backup',
 			version: 1 as const,
@@ -319,6 +349,97 @@ export class Driftpane {
 			data,
 		};
 		return JSON.stringify(envelope, null, 2);
+	}
+
+	/** Restores a namespace backup into this panel, preserving its factory Default. */
+	public importAllJSON(raw: string): void {
+		if (this.sharePreviewActive) {
+			throw new Error(
+				'Accept or discard the shared preview before importing a backup',
+			);
+		}
+		const object = (value: unknown): value is Record<string, unknown> =>
+			value !== null && typeof value === 'object' && !Array.isArray(value);
+		const backup: unknown = JSON.parse(raw);
+		if (
+			!object(backup) ||
+			backup['format'] !== 'driftpane-backup' ||
+			backup['version'] !== 1 ||
+			!object(backup['data'])
+		) {
+			throw new Error('Invalid Driftpane backup');
+		}
+		const data = backup['data'];
+		const position = data['position'];
+		const width = data['width'];
+		const theme = data['theme'];
+		const height = data['maxHeight'];
+		if (
+			(position !== undefined &&
+				(!object(position) ||
+					typeof position['x'] !== 'number' ||
+					!Number.isFinite(position['x']) ||
+					typeof position['y'] !== 'number' ||
+					!Number.isFinite(position['y']))) ||
+			(width !== undefined &&
+				(typeof width !== 'number' || !Number.isFinite(width) || width <= 0)) ||
+			(theme !== undefined &&
+				theme !== 'auto' &&
+				theme !== 'light' &&
+				theme !== 'dark') ||
+			(height !== undefined && !isMaxHeightValue(height))
+		) {
+			throw new Error('Invalid backup settings');
+		}
+		const before = this.pane.exportState();
+		const index = this.resolveManagerIndex();
+		const state = data['state'];
+		if (
+			state !== undefined &&
+			(!object(state) ||
+				structureSignature(state) !==
+					structureSignature(stripManagerChild(before, index)))
+		) {
+			throw new Error('Backup does not match this pane');
+		}
+		this.persistence.pause();
+		this.urlShare?.suspend();
+		try {
+			if (
+				state &&
+				!importPaneState(
+					this.pane,
+					mergeManagerChild(before, state as SerializedState, index),
+				)
+			) {
+				throw new Error('Cannot apply backup state');
+			}
+			// replaceStore validates the entire collection before replacing anything.
+			if (data['presets'] !== undefined) {
+				this.presets.replaceStore(data['presets']);
+			}
+		} catch (error) {
+			importPaneState(this.pane, before);
+			throw error;
+		} finally {
+			this.persistence.resume();
+			// pause() cancelled any user edit queued before the import. Re-arm it
+			// even on rollback so rejecting a file cannot silently lose that edit.
+			this.persistence.scheduleSave();
+			this.urlShare?.resume();
+		}
+		this.urlShare?.cancelIncomingRead();
+		if (typeof height === 'string') this.setMaxHeight(height);
+		if (typeof width === 'number') this.draggable.setWidth(width);
+		if (object(position))
+			this.draggable.setPosition(position as unknown as DriftpanePosition);
+		if (theme === 'auto' || theme === 'light' || theme === 'dark')
+			this.theme.set(theme);
+		this.pane.refresh();
+		this.presetMenu?.refreshList();
+		this.persistence.saveNow();
+		this.urlShare?.syncIdentity();
+		if (state) this.notifyStateApplied('restore');
 	}
 
 	/** Saves the current state as a new preset with the given name. */
@@ -380,6 +501,9 @@ export class Driftpane {
 			return;
 		}
 		const incoming = await share.readIncoming();
+		if (this.disposed) {
+			return;
+		}
 		if (incoming.kind !== 'envelope') {
 			// none / ignore / too-new: nothing to apply, just resume sync.
 			share.resume();
@@ -400,6 +524,7 @@ export class Driftpane {
 
 		const resolved = this.presets.resolveSharedAction(env);
 
+		this.sharePreviewActive = true;
 		this.persistence.pause();
 		const preApply = this.pane.exportState();
 		const managerIndex = this.resolveManagerIndex();
@@ -407,7 +532,20 @@ export class Driftpane {
 			structureSignature(env.s) !==
 			structureSignature(stripManagerChild(preApply, managerIndex));
 		const full = buildSharedImport(preApply, env.s, managerIndex);
-		this.pane.importState(full);
+		try {
+			if (!importPaneState(this.pane, full)) {
+				throw new Error('Incompatible shared state');
+			}
+		} catch {
+			try {
+				importPaneState(this.pane, preApply);
+			} finally {
+				this.sharePreviewActive = false;
+				this.persistence.resume();
+				share.resume();
+			}
+			return;
+		}
 		this.pane.refresh();
 		this.notifyStateApplied('share');
 
@@ -437,8 +575,9 @@ export class Driftpane {
 					this.finishShareAccept();
 				},
 				onDiscard: (): void => {
+					this.sharePreviewActive = false;
 					// Revert to the pre-open state, drop the param, resume everything.
-					this.pane.importState(preApply);
+					importPaneState(this.pane, preApply);
 					this.pane.refresh();
 					this.notifyStateApplied('share-discard');
 					share.clear();
@@ -452,6 +591,7 @@ export class Driftpane {
 
 	/** Common tail of accepting a shared preset: persist + resume + restamp URL. */
 	private finishShareAccept(): void {
+		this.sharePreviewActive = false;
 		this.pane.refresh();
 		this.presetMenu?.refreshList();
 		this.persistence.resume();
@@ -501,6 +641,11 @@ export class Driftpane {
 
 	/** Tears down the manager: removes listeners and added UI. */
 	public dispose(): void {
+		if (this.disposed) {
+			return;
+		}
+		this.disposed = true;
+		this.unsubscribePresets?.();
 		this.persistence.dispose();
 		this.draggable.dispose();
 		this.presetMenu?.dispose();

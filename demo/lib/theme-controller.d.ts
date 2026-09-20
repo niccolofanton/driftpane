@@ -20,6 +20,7 @@ export declare class ThemeController {
     private readonly mql;
     /** Listener currently attached to `mql` (only in 'auto' mode). */
     private mqlListener;
+    private readonly listeners;
     constructor(opts: ThemeControllerOptions);
     /** Current setting (auto/light/dark), NOT the resolved value. */
     get(): DriftpaneTheme;
@@ -27,6 +28,8 @@ export declare class ThemeController {
     resolved(): ResolvedTheme;
     /** Sets the setting, persists and applies it (updates data-theme). */
     set(theme: DriftpaneTheme): void;
+    /** Observes setting changes, including those made through the public API. */
+    subscribe(listener: () => void): () => void;
     /** Removes the matchMedia listener. */
     dispose(): void;
     /**

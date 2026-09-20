@@ -72,19 +72,32 @@ describe('DriftpaneStorage', () => {
 	});
 
 	it('degrades to a no-op when storage is unavailable', () => {
-		// Force isStorageAvailable() to be false at construction time.
+		// A failed operation must not make later recovery impossible.
 		const setSpy = vi
 			.spyOn(Storage.prototype, 'setItem')
 			.mockImplementation(() => {
 				throw new Error('unavailable');
 			});
 		const s = new DriftpaneStorage('na');
-		setSpy.mockRestore();
 
-		// All operations must be safe no-ops and reads return the fallback.
+		// Writes fail safely while reads and removal can still operate.
 		expect(() => s.writeJSON('k', {a: 1})).not.toThrow();
 		expect(s.readJSON('k', 'fallback')).toBe('fallback');
 		expect(() => s.remove('k')).not.toThrow();
+		setSpy.mockRestore();
+		s.writeJSON('k', {a: 2});
+		expect(s.readJSON('k', null)).toEqual({a: 2});
+	});
+
+	it('reads and removes saved state when quota prevents writes', () => {
+		localStorage.setItem('driftpane:full:state', JSON.stringify({value: 8}));
+		vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+			throw new DOMException('full', 'QuotaExceededError');
+		});
+		const storage = new DriftpaneStorage('full');
+		expect(storage.readJSON('state', null)).toEqual({value: 8});
+		storage.remove('state');
+		expect(localStorage.getItem('driftpane:full:state')).toBeNull();
 	});
 
 	it('writeJSON swallows setItem errors (quota) without throwing', () => {

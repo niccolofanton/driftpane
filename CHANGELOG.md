@@ -1,5 +1,92 @@
 # Changelog
 
+## 1.3.0 (2026-09-20)
+
+### Complete playground
+
+- Rebuilt the existing waveform demo into an interactive showcase of all seven
+  features, full backups, apply callbacks and independent namespaces.
+- Added a separate receiver sandbox for Import / Overwrite / Discard, runtime
+  controls, responsive layouts and reduced-motion support.
+- Readonly monitor updates no longer mark an otherwise unchanged preset dirty.
+
+### Fixes
+
+- Preset selections that cannot be applied now return to the actual active
+  preset; deleting an active preset applies its successor before emitting the
+  state-applied hook. Direct controller changes also refresh the menu.
+- Factory Default values and structure refresh once per initialized session,
+  retaining the baseline identity. Public overwrite/remove APIs protect it;
+  raw state imports handle the pane's manager folder.
+- The manager folder is located by identity after controls are added or removed.
+  Structure checks distinguish same-key bindings with different labels or
+  readonly status, and merge-by-path skips ambiguous matches.
+- Nested tab selection is restored into Tweakpane's selection model. Presets
+  and shared states preserve local folder/tab navigation; legacy preset
+  snapshots are normalized too. Folders added later gain persistence listeners.
+- Storage reads and removals remain available when writes fail because of quota
+  limits; a failed write probe no longer disables access to existing data.
+- Readonly monitor updates no longer keep postponing editable state saves.
+  URL sync also reacts to preset identity changes without binding changes;
+  clearing a link cancels queued/in-flight writes, and disposal prevents late
+  incoming decode results from applying state. Corrupt compressed payloads are
+  handled without leaving an unhandled stream rejection.
+- Drag/resize tracks the active pointer, avoids changes on clicks without
+  movement, preserves height on collapsed/corner-width-only gestures, and
+  adapts rendered size to the viewport while retaining preferred dimensions.
+  Disabling and re-enabling dragging preserves the pane's DOM placement without
+  accumulating wrappers or stale gesture handlers.
+- Scroll height accounts for the title bar and viewport. Color/point pickers can
+  escape scroll clipping through the browser top layer, with an inline fallback.
+  Programmatic theme changes keep the optional theme selector synchronized.
+  The light-theme root shadow uses the light override, and the demo consumes the
+  shared package skin instead of maintaining a divergent copy.
+
+### Backup restore
+
+- `importAllJSON(raw)` and the menu's **Import** action restore full namespace
+  backups. Included fields replace their counterparts in the receiving panel;
+  missing fields remain unchanged. Custom collections are replaced while the
+  receiver's current factory Default is preserved.
+- Exports include current values, navigation and layout rather than waiting for
+  pending state debounces. Failed imports retain the prior pane state and do
+  not discard a pending user-edit save.
+
+### Adversarial review fixes
+
+- Failed or throwing state imports roll back controls already changed by
+  Tweakpane, covering persistence restores, presets and shared configurations.
+- Backup collections reject malformed snapshots before replacing saved presets.
+  Unsupported declared versions are rejected; opening a newer persisted store
+  leaves it untouched and releases initialization listeners. Legacy stores
+  without a version remain supported.
+- Imported Default files become user-owned presets. Older backups with multiple
+  protected Defaults retain the additional presets as editable copies instead
+  of dropping them. Empty or reserved selector IDs are regenerated.
+- Pending file reads are aborted when the menu is disposed or another file is
+  selected, and stale callbacks cannot import state after teardown.
+- Backup import cannot overwrite an unresolved shared preview. Shared state
+  preserves local root visibility; concurrent link-copy requests return the
+  latest usable link, and clearing a link invalidates pending incoming reads.
+- Resetting persistence through a pane button no longer recreates the cleared
+  key through the same click. Immediately folded newly added folders retain
+  their state.
+- Invalid saved positions are normalized; lost pointer capture ends gestures.
+  Drag and resize use the pane's own window for iframe events and bounds.
+- Popup positioning follows scrolling ancestors. Explicit pane themes retain
+  precedence over ancestor themes, including popup styling. Invalid height
+  values are rejected before they can disable the viewport cap.
+
+### Compatibility and verification
+
+- **URL sharing is on by default** and can change the host query string while
+  forcing the preset menu on. Set `urlSync: false` to opt out; set both
+  `urlSync: false` and `presetsEnabled: false` to omit the preset folder.
+- Added regressions using real Tweakpane for presets, navigation, full backups,
+  URL lifecycle and identity changes, alongside drag/resize and popup checks.
+- Updated the README, public type comments, URL-sharing specification and demo
+  instructions to match the implementation.
+
 ## 1.2.2 (2026-09-10)
 
 Packaging and documentation only — no runtime change.

@@ -11,10 +11,27 @@
 // "dynamic island" fold animates the content height, so a cap on the root made
 // it restart from a wrong point on closing; capping it here leaves the animation
 // correct. For the same reason the rule is NOT gated on the expanded state.
+import { PopupLayer } from './popups.js';
+const popupLayers = new WeakMap();
 /** Marker class applied to the panel to activate the scroll CSS rule. */
 const SCROLL_CLASS = 'driftpane-scroll';
 /** Inline CSS variable that carries the cap value onto the panel. */
 const MAX_HEIGHT_VAR = '--dp-max-height';
+/** A finite CSS length/expression usable inside the viewport cap's min(). */
+export function isMaxHeightValue(value) {
+    if (typeof value !== 'string' || !value.trim())
+        return false;
+    const css = value.trim();
+    if (/^(?:none|auto|initial|inherit|unset|revert|fit-content|max-content|min-content)$/i.test(css))
+        return false;
+    if (/^(?:NaN|[-+]?Infinity)/i.test(css))
+        return false;
+    if (typeof CSS !== 'undefined' && typeof CSS.supports === 'function') {
+        return CSS.supports('max-height', `min(${css}, 100dvh)`);
+    }
+    // No CSS parser (SSR/test DOM): accept CSS lengths and math expressions.
+    return (/^(?:\d+(?:\.\d+)?|\.\d+)(?:px|%|[sld]?v[wh]|[sld]?vmin|[sld]?vmax|em|rem|ch|ex|lh|rlh|cm|mm|in|pt|pc)$/i.test(css) || /^(?:calc|min|max|clamp|var)\(.+\)$/i.test(css));
+}
 /**
  * Applies the height cap + scroll on the host (typically pane.element, i.e.
  * the root panel `.tp-rotv`). `value` is an already-formatted CSS length
@@ -23,14 +40,19 @@ const MAX_HEIGHT_VAR = '--dp-max-height';
  * no-op (vh/px formatting is the caller's responsibility).
  */
 export function applyMaxHeight(host, value) {
-    if (typeof value !== 'string' || value.trim() === '') {
+    if (!isMaxHeightValue(value)) {
         return;
     }
     host.classList.add(SCROLL_CLASS);
     host.style.setProperty(MAX_HEIGHT_VAR, value);
+    if (!popupLayers.has(host)) {
+        popupLayers.set(host, new PopupLayer(host));
+    }
 }
 /** Removes the cap (cleanup/dispose): strips the marker class and the variable. */
 export function clearMaxHeight(host) {
+    popupLayers.get(host)?.dispose();
+    popupLayers.delete(host);
     host.classList.remove(SCROLL_CLASS);
     host.style.removeProperty(MAX_HEIGHT_VAR);
 }

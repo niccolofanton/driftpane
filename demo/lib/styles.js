@@ -79,12 +79,18 @@ export const DRIFTPANE_CSS = `
 .tp-rotv.driftpane-scroll > .tp-rotv_c,
 .driftpane-scroll .tp-rotv > .tp-rotv_c {
 	max-height: calc(
-		var(--dp-max-height, calc(100dvh - 48px)) - var(--dp-titlebar, 24px)
+		min(var(--dp-max-height, calc(100dvh - 48px)), calc(100dvh - 2px)) - var(--dp-titlebar, 24px)
 	);
 	overflow-y: auto;
 	/* Sober/neutral scrollbar (Firefox): semi-transparent, fine on light and dark. */
 	scrollbar-width: thin;
 	scrollbar-color: rgba(128, 128, 128, 0.4) transparent;
+}
+.driftpane-scroll .tp-popv[data-driftpane-inline-popup] {
+	position: relative;
+	inset: auto;
+	max-width: 100%;
+	box-sizing: border-box;
 }
 /* Sober/neutral scrollbar (WebKit/Blink). */
 .tp-rotv.driftpane-scroll > .tp-rotv_c::-webkit-scrollbar,

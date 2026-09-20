@@ -7,9 +7,9 @@ export interface PaneLike {
 }
 export interface PresetOptions {
     /**
-     * Index of the preset folder to exclude from snapshots. The preset folder is
-     * the LAST child: typically a `() => last index` resolver (see
-     * driftpane.ts); also accepts a fixed number (used by tests).
+     * Index of the preset folder to exclude from snapshots. A resolver can track
+     * the mounted folder when controls are added or removed; a fixed index is
+     * also supported.
      */
     managerChildIndex: number | (() => number);
 }
@@ -18,9 +18,15 @@ export declare class PresetController {
     private readonly storage;
     private readonly managerChildIndex;
     private store;
+    private readonly listeners;
+    private factoryCaptured;
     constructor(pane: PaneLike, storage: DriftpaneStorage, opts: PresetOptions);
     /** Resolves the preset folder index (fixed number or lazy resolver). */
     private resolveManagerIndex;
+    /** Observe collection or active identity changes. Returns an unsubscribe function. */
+    subscribe(listener: () => void): () => void;
+    /** Replace a backup collection while retaining this app's current factory baseline. */
+    replaceStore(value: unknown): void;
     /** List of presets (defensive copy of the array). */
     list(): DriftpanePreset[];
     /** Id of the active preset (or null). */
@@ -55,10 +61,10 @@ export declare class PresetController {
      */
     removeActive(): boolean;
     /**
-     * Ensures a DEFAULT preset exists (custom: false): if no default preset is
-     * already present, creates one by capturing the current snapshot (the pane's
-     * initial state) as a NON-deletable, non-overwritable baseline, to be used as
-     * the target of "Restore". If there is no active preset, it makes it active.
+     * Captures the current app's DEFAULT preset once per controller session.
+     * An existing baseline keeps its identity but receives the current factory
+     * values and structure. Otherwise a non-deletable, non-overwritable baseline
+     * is created and becomes active if nothing else is selected.
      * Must be called AFTER mounting the preset folder and BEFORE restoring
      * persistence (so it captures the factory defaults).
      * @returns true if the default was created.
@@ -122,6 +128,8 @@ export declare class PresetController {
         imported: number;
         ids: string[];
     };
+    /** Accept both scoped snapshots and full exports containing our manager folder. */
+    private normalizeRawState;
     /** Scoped snapshot (without the preset folder) of the pane's current state. */
     private snapshot;
     private loadStore;

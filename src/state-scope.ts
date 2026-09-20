@@ -7,15 +7,14 @@
 // EVERY child to import successfully (`.every(...)`). In addition, the folder
 // imports `expanded` as a REQUIRED field.
 //
-// At runtime the LAST child of the pane is the preset manager folder (we append
-// it at the end). If we included it in the persisted snapshot or in the presets,
-// on re-import it would end up:
+// At initialization the preset manager folder is appended to the pane. Including
+// it in persisted snapshots or presets would:
 //  - making the structure diverge across machines/sessions;
 //  - overwriting the preset folder state.
-// So we EXCLUDE it by index (the last child) both on export and on import, and
+// So we EXCLUDE it by its current index both on export and on import, and
 // on import we reintroduce it by taking the LIVE state of the current preset
 // folder, so the positional match stays valid. The index is passed by the caller
-// as a resolver "() => last index" (see driftpane.ts).
+// as a resolver that tracks the actual manager folder (see driftpane.ts).
 
 import {SerializedState} from './types.js';
 
@@ -26,8 +25,8 @@ export function childrenCount(state: SerializedState): number {
 }
 
 /**
- * STRUCTURE signature of a state: folder titles, binding keys and the shape of
- * the tree, IGNORING values and the `expanded` state. Used to tell whether two
+ * STRUCTURE signature of a state: folder titles, binding keys/labels and the shape of
+ * the tree, ignoring values and folder/tab navigation. Used to tell whether two
  * snapshots describe the same pane: the core `importState` is positional and
  * would misapply a state with a different structure (corrupting labels and
  * values), so we compare signatures before importing.
@@ -45,9 +44,14 @@ export function structureSignature(state: SerializedState): string {
 		const binding = o['binding'];
 		if (binding && typeof binding === 'object') {
 			sig['b'] = (binding as Record<string, unknown>)['key'];
+			sig['l'] = o['label'] ?? null;
+			sig['r'] = (binding as Record<string, unknown>)['readonly'] === true;
 		}
 		if (Array.isArray(o['children'])) {
 			sig['c'] = (o['children'] as unknown[]).map(walk);
+		}
+		if (Array.isArray(o['pages'])) {
+			sig['p'] = (o['pages'] as unknown[]).map(walk);
 		}
 		return sig;
 	};
@@ -90,7 +94,7 @@ export function stripManagerChild(
  * @param target Current live state of the pane (must contain the preset folder
  *               at the expected index); provides the manager segment to re-insert.
  * @param scoped Scoped state to apply (user values/expanded).
- * @param managerChildIndex Index of the preset folder (typically the last one).
+ * @param managerChildIndex Current index of the actual mounted preset folder.
  */
 export function mergeManagerChild(
 	target: SerializedState,
@@ -128,10 +132,86 @@ export function mergeManagerChild(
 	};
 }
 
+/** Tab page visibility is derived from selection, unlike ordinary blade visibility. */
+function isTabPageState(node: Record<string, unknown>): boolean {
+	return (
+		typeof node['selected'] === 'boolean' &&
+		typeof node['title'] === 'string' &&
+		Array.isArray(node['children'])
+	);
+}
+
 /**
- * Returns a deep copy of `state` with every `expanded` field removed. Presets use
- * this so they do NOT store the open/closed state of folders/tabs — that memory
- * is GLOBAL (persisted in the `state` key), not per-preset.
+ * Imports a full pane state and repairs Tweakpane 4's tab selection model.
+ * Upstream imports the tab header/visibility but not TabPageApi.selected; using
+ * the public setter makes subsequent clicks and select events work normally.
+ */
+export function importPaneState(
+	pane: {
+		importState(state: SerializedState): boolean;
+		exportState?(): SerializedState;
+	},
+	state: SerializedState,
+): boolean {
+	const before = pane.exportState?.();
+	const visit = (api: unknown, snapshot: unknown): void => {
+		if (
+			!api ||
+			typeof api !== 'object' ||
+			!snapshot ||
+			typeof snapshot !== 'object'
+		) {
+			return;
+		}
+		const node = api as {
+			children?: unknown[];
+			pages?: Array<{selected: boolean}>;
+		};
+		const saved = snapshot as Record<string, unknown>;
+		const states = Array.isArray(saved['children'])
+			? saved['children']
+			: saved['pages'];
+		const children = Array.isArray(node.pages) ? node.pages : node.children;
+		if (!Array.isArray(states) || !Array.isArray(children)) {
+			return;
+		}
+		if (Array.isArray(node.pages)) {
+			const selected = states.findIndex(
+				(page: unknown) =>
+					!!page &&
+					typeof page === 'object' &&
+					(page as Record<string, unknown>)['selected'] === true,
+			);
+			if (selected >= 0 && selected < node.pages.length) {
+				node.pages[selected].selected = true;
+			}
+		}
+		children.forEach((child, index) => visit(child, states[index]));
+	};
+	try {
+		if (!pane.importState(state)) throw new Error('Incomplete state import');
+		visit(pane, state);
+		return true;
+	} catch {
+		// Tweakpane imports children sequentially: false can mean that a prefix
+		// already changed. Restore values and the tab model before reporting failure.
+		if (before) {
+			try {
+				pane.importState(before);
+				visit(pane, before);
+			} catch {
+				// A consumer binding can itself throw; restoration is best effort.
+			}
+		}
+		return false;
+	}
+}
+
+/**
+ * Returns a deep copy without folder expansion or tab selection/visibility.
+ * The latter is recognized by the tab page's selected/title/children fields.
+ * Presets use this to keep folder expansion and tab selection in the global
+ * persisted `state` key rather than in each preset.
  */
 export function stripExpanded(state: SerializedState): SerializedState {
 	const walk = (node: unknown): unknown => {
@@ -144,7 +224,10 @@ export function stripExpanded(state: SerializedState): SerializedState {
 		const o = node as Record<string, unknown>;
 		const out: Record<string, unknown> = {};
 		for (const key of Object.keys(o)) {
-			if (key === 'expanded') {
+			if (
+				key === 'expanded' ||
+				(isTabPageState(o) && (key === 'selected' || key === 'hidden'))
+			) {
 				continue;
 			}
 			out[key] = walk(o[key]);
@@ -189,7 +272,7 @@ export function stripReadonly(state: SerializedState): SerializedState {
 }
 
 /**
- * Returns a copy of `target` in which every node's `expanded` field is taken from
+ * Returns a copy of `target` in which expansion and tab navigation are taken from
  * the structurally-corresponding node in `source` (matched positionally by
  * `children`/`pages` index). Applied before importing a preset so applying it
  * keeps the CURRENT open/closed state of folders/tabs instead of forcing the
@@ -215,6 +298,10 @@ export function overlayExpanded(
 		const out: Record<string, unknown> = {...to};
 		if (so && 'expanded' in so) {
 			out['expanded'] = so['expanded'];
+		}
+		if (so && isTabPageState(so)) {
+			out['selected'] = so['selected'];
+			out['hidden'] = so['hidden'];
 		}
 		if ('children' in to) {
 			out['children'] = walk(to['children'], so ? so['children'] : undefined);
@@ -345,7 +432,11 @@ export function mergeByPath(
 			const pathStr = [...titlePath, binding.key].join(PATH_SEP);
 			let value: unknown;
 			let matched = false;
-			if (src.byPath.has(pathStr) && !src.dupPaths.has(pathStr)) {
+			if (
+				src.byPath.has(pathStr) &&
+				!src.dupPaths.has(pathStr) &&
+				!tgt.dupPaths.has(pathStr)
+			) {
 				value = src.byPath.get(pathStr);
 				matched = true;
 			} else if (
@@ -404,5 +495,9 @@ export function buildSharedImport(
 			? sourceScoped
 			: mergeByPath(liveScoped, sourceScoped);
 	const full = mergeManagerChild(liveFull, appliedScoped, managerChildIndex);
+	// Keep the receiving pane and its reconciliation controls reachable. Child
+	// visibility remains shareable, but root chrome belongs to the receiver.
+	full['hidden'] = liveFull['hidden'];
+	full['disabled'] = liveFull['disabled'];
 	return overlayExpanded(full, liveFull);
 }
