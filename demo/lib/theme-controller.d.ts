@@ -21,6 +21,7 @@ export declare class ThemeController {
     /** Listener currently attached to `mql` (only in 'auto' mode). */
     private mqlListener;
     private readonly listeners;
+    private disposed;
     constructor(opts: ThemeControllerOptions);
     /** Current setting (auto/light/dark), NOT the resolved value. */
     get(): DriftpaneTheme;

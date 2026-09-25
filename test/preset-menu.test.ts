@@ -16,6 +16,15 @@ function liveState(): SerializedState {
 	};
 }
 
+function submitName(name: string): void {
+	const editor = document.querySelector('.dp-name-editor') as HTMLElement;
+	const input = editor.querySelector('input') as HTMLInputElement;
+	input.value = name;
+	editor
+		.querySelector('button')
+		?.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+}
+
 /**
  * Intercepts the <a download> created by downloadFile and stubs the URL
  * object-URL helpers (absent in jsdom). Returns the captured anchors. The spies
@@ -118,37 +127,64 @@ describe('PresetMenu', () => {
 		expect(input?.style.display).not.toBe('none');
 	});
 
-	it('"Save as new" prompts for a name and creates a custom preset', () => {
-		vi.spyOn(window, 'prompt').mockReturnValue('Fresh');
+	it('"Save as new" opens an editor and creates a custom preset', () => {
+		vi.spyOn(window, 'prompt').mockImplementation(() => {
+			throw new Error('Browser prompt blocked');
+		});
 		const folder = menu.mount() as unknown as FakeFolder;
 		folder.button('Save as new')?.click();
+		expect(document.querySelector('.dp-name-editor input')).not.toBeNull();
+		submitName('Fresh');
 		expect(presets.list()).toHaveLength(1);
 		expect(presets.list()[0].name).toBe('Fresh');
 		expect(presets.list()[0].custom).toBe(true);
+		expect(document.querySelector('.dp-name-editor')).toBeNull();
 	});
 
-	it('"Save as new" is cancelled when prompt returns null', () => {
-		vi.spyOn(window, 'prompt').mockReturnValue(null);
+	it('saves the inline name with Enter', () => {
 		const folder = menu.mount() as unknown as FakeFolder;
 		folder.button('Save as new')?.click();
+		const input = document.querySelector(
+			'.dp-name-editor input',
+		) as HTMLInputElement;
+		input.value = 'Keyboard';
+		input.dispatchEvent(
+			new KeyboardEvent('keydown', {
+				key: 'Enter',
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+		expect(presets.activeName()).toBe('Keyboard');
+		expect(document.querySelector('.dp-name-editor')).toBeNull();
+	});
+
+	it('"Save as new" is cancelled without creating a preset', () => {
+		const folder = menu.mount() as unknown as FakeFolder;
+		folder.button('Save as new')?.click();
+		(
+			document.querySelector(
+				'.dp-name-editor .dp-name-editor-actions button:last-child',
+			) as HTMLButtonElement
+		).click();
 		expect(presets.list()).toHaveLength(0);
 	});
 
 	it('"Save changes" overwrites the active preset (with confirmation)', () => {
-		vi.spyOn(window, 'prompt').mockReturnValue('A');
 		vi.spyOn(window, 'confirm').mockReturnValue(true);
 		const folder = menu.mount() as unknown as FakeFolder;
 		folder.button('Save as new')?.click();
+		submitName('A');
 		expect(presets.list()).toHaveLength(1);
 		folder.button('Save changes')?.click();
 		expect(presets.list()).toHaveLength(1); // overwritten, not added
 	});
 
 	it('"Save changes" does NOT overwrite when confirmation is cancelled', () => {
-		vi.spyOn(window, 'prompt').mockReturnValue('A');
 		const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 		const folder = menu.mount() as unknown as FakeFolder;
 		folder.button('Save as new')?.click();
+		submitName('A');
 		const before = JSON.stringify(presets.list()[0].state);
 		folder.button('Save changes')?.click();
 		expect(confirmSpy).toHaveBeenCalled();
@@ -179,12 +215,12 @@ describe('PresetMenu', () => {
 
 	it('shows a toast (console.info + DOM node) on rename feedback', () => {
 		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
-		vi.spyOn(window, 'prompt')
-			.mockReturnValueOnce('Original') // for Save as new
-			.mockReturnValueOnce('Renamed'); // for Rename
 		const folder = menu.mount() as unknown as FakeFolder;
 		folder.button('Save as new')?.click();
+		submitName('Original');
 		folder.button('Rename preset')?.click();
+		submitName('Renamed');
+		expect(presets.activeName()).toBe('Renamed');
 		expect(info).toHaveBeenCalled();
 		const toast = document.querySelector('[data-driftpane-toast]');
 		expect(toast).not.toBeNull();

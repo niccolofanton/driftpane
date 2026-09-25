@@ -121,7 +121,21 @@ export class Driftpane {
 	private readonly onStateApplied?: (reason: DriftpaneApplyReason) => void;
 	private disposed = false;
 	private sharePreviewActive = false;
+	private sharePreviewOriginalState: SerializedState | null = null;
 	private unsubscribePresets?: () => void;
+	private readonly preventHostFormSubmit = (event: MouseEvent): void => {
+		const target = event.target;
+		if (!(target instanceof Element)) return;
+		const button = target.closest('button');
+		if (
+			button &&
+			this.pane.element.contains(button) &&
+			!button.hasAttribute('type')
+		) {
+			// Tweakpane buttons have an implicit submit type when embedded in a form.
+			event.preventDefault();
+		}
+	};
 
 	constructor(pane: PaneLike, opts?: DriftpaneOptions) {
 		const options = {...DEFAULTS, ...(opts ?? {})};
@@ -286,6 +300,11 @@ export class Driftpane {
 		} else {
 			this.urlShare = null;
 		}
+		this.pane.element.addEventListener(
+			'click',
+			this.preventHostFormSubmit,
+			true,
+		);
 	}
 
 	/**
@@ -329,6 +348,14 @@ export class Driftpane {
 			if (value !== null) {
 				data[suffix] = value;
 			}
+		}
+		if (this.sharePreviewOriginalState) {
+			// A suspended preview must never become a backup, even if an older
+			// persisted state exists or local edits were still awaiting debounce.
+			data['state'] = stripManagerChild(
+				this.sharePreviewOriginalState,
+				this.resolveManagerIndex(),
+			);
 		}
 		data['state'] ??= stripManagerChild(
 			this.pane.exportState(),
@@ -467,6 +494,9 @@ export class Driftpane {
 	 * initial defaults.
 	 */
 	public resetState(): void {
+		if (this.sharePreviewActive) {
+			throw new Error('Accept or discard the shared preview first');
+		}
 		this.persistence.clear();
 	}
 
@@ -515,22 +545,31 @@ export class Driftpane {
 		}
 		const env = incoming.env;
 
-		// Self-skip: if the shared state already equals our local state (e.g. our
-		// OWN live-synced URL on reload, or an identical config), there is nothing
-		// to import — don't prompt, just resume sync.
+		// Skip only our own current preset on reload. Equal values can belong to
+		// a different preset, whose identity still needs reconciliation.
 		const localStripped = JSON.stringify(
 			stripReadonly(this.presets.currentSnapshot()),
 		);
-		if (JSON.stringify(env.s) === localStripped) {
+		const active = this.presets.activeIdentity();
+		const sameIdentity = env.d
+			? active?.isDefault === true && active.name === env.n
+			: active?.isDefault === false &&
+				typeof env.id === 'string' &&
+				active.id === env.id;
+		if (sameIdentity && JSON.stringify(env.s) === localStripped) {
 			share.resume();
+			// A previously shared URL may still carry the old name for this UUID.
+			if (active && env.n !== active.name) void share.writeNow();
 			return;
 		}
 
 		const resolved = this.presets.resolveSharedAction(env);
 
-		this.sharePreviewActive = true;
-		this.persistence.pause();
 		const preApply = this.pane.exportState();
+		this.sharePreviewActive = true;
+		this.presets.setSharePreviewActive(true);
+		this.persistence.pause();
+		this.sharePreviewOriginalState = preApply;
 		const managerIndex = this.resolveManagerIndex();
 		const merged =
 			structureSignature(env.s) !==
@@ -545,6 +584,8 @@ export class Driftpane {
 				importPaneState(this.pane, preApply);
 			} finally {
 				this.sharePreviewActive = false;
+				this.presets.setSharePreviewActive(false);
+				this.sharePreviewOriginalState = null;
 				this.persistence.resume();
 				share.resume();
 			}
@@ -566,6 +607,7 @@ export class Driftpane {
 				action: resolved.action,
 				existingName: resolved.existingName,
 				merged,
+				reuseByContent: env.d || !env.id,
 			},
 			{
 				onImport: (): void => {
@@ -579,23 +621,36 @@ export class Driftpane {
 					this.finishShareAccept();
 				},
 				onDiscard: (): void => {
-					this.sharePreviewActive = false;
-					// Revert to the pre-open state, drop the param, resume everything.
-					importPaneState(this.pane, preApply);
-					this.pane.refresh();
-					this.notifyStateApplied('share-discard');
-					share.clear();
-					this.persistence.resume();
-					share.resume();
-					this.presetMenu?.refreshList();
+					this.discardSharePreview();
 				},
 			},
 		);
 	}
 
+	/** Restores local values and unlocks presets when an incoming preview is discarded. */
+	private discardSharePreview(): void {
+		const original = this.sharePreviewOriginalState;
+		if (!this.sharePreviewActive || !original) {
+			this.urlShare?.clear();
+			return;
+		}
+		this.sharePreviewActive = false;
+		this.presets.setSharePreviewActive(false);
+		this.sharePreviewOriginalState = null;
+		importPaneState(this.pane, original);
+		this.pane.refresh();
+		this.notifyStateApplied('share-discard');
+		this.urlShare?.clear();
+		this.persistence.resume();
+		this.urlShare?.resume();
+		this.presetMenu?.dismissSharePrompt();
+	}
+
 	/** Common tail of accepting a shared preset: persist + resume + restamp URL. */
 	private finishShareAccept(): void {
 		this.sharePreviewActive = false;
+		this.presets.setSharePreviewActive(false);
+		this.sharePreviewOriginalState = null;
 		this.pane.refresh();
 		this.presetMenu?.refreshList();
 		this.persistence.resume();
@@ -640,7 +695,7 @@ export class Driftpane {
 
 	/** Removes the share param from the URL (the "stop sharing" affordance). */
 	public clearShareUrl(): void {
-		this.urlShare?.clear();
+		this.discardSharePreview();
 	}
 
 	/** Switch presentation without recreating bindings or losing values/presets. */
@@ -662,6 +717,17 @@ export class Driftpane {
 			return;
 		}
 		this.disposed = true;
+		this.pane.element.removeEventListener(
+			'click',
+			this.preventHostFormSubmit,
+			true,
+		);
+		if (this.sharePreviewOriginalState) {
+			importPaneState(this.pane, this.sharePreviewOriginalState);
+			this.sharePreviewOriginalState = null;
+			this.sharePreviewActive = false;
+			this.presets.setSharePreviewActive(false);
+		}
 		this.unsubscribePresets?.();
 		this.persistence.dispose();
 		this.sidepanel?.dispose();

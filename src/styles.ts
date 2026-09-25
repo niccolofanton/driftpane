@@ -214,6 +214,42 @@ export const DRIFTPANE_CSS = `
 	--dp-btn-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/%3E%3C/svg%3E");
 }
 /* === Incoming-share prompt: a custom card at the top of the preset folder === */
+.dp-name-editor {
+	margin: 4px;
+	padding: 8px;
+	border-radius: var(--bs-br, 4px);
+	background: var(--tp-container-background-color, hsla(240, 5%, 16%, 0.45));
+	border: 1px solid var(--tp-groove-foreground-color, rgba(255, 255, 255, 0.12));
+	color: var(--tp-label-foreground-color, #d6d7db);
+	font: 11px system-ui, sans-serif;
+}
+.dp-name-editor label { display: block; }
+.dp-name-editor input {
+	display: block;
+	box-sizing: border-box;
+	width: 100%;
+	margin-top: 5px;
+	padding: 5px 6px;
+	border: 1px solid var(--tp-groove-foreground-color, rgba(255, 255, 255, 0.2));
+	border-radius: var(--bs-br, 4px);
+	background: var(--tp-input-background-color, #202024);
+	color: var(--tp-input-foreground-color, #ededee);
+	font: inherit;
+}
+.dp-name-editor-actions { display: flex; gap: 4px; margin-top: 7px; }
+.dp-name-editor-actions button {
+	flex: 1 1 0;
+	padding: 4px;
+	border: 0;
+	border-radius: var(--bs-br, 4px);
+	background: var(--tp-button-background-color, #38383e);
+	color: var(--tp-button-foreground-color, #ededee);
+	font: inherit;
+	cursor: pointer;
+}
+.dp-name-editor-actions button:hover {
+	background: var(--tp-button-background-color-hover, #484850);
+}
 .dp-share-card {
 	margin: 4px;
 	padding: 8px;

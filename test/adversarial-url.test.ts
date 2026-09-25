@@ -58,6 +58,13 @@ it('preview imports editable values while preserving local readonly monitors', a
 	expect(values.monitor).toBe(42);
 	expect(pane.element.querySelector('.dp-share-card')).not.toBeNull();
 });
+it('copying a link during the preview does not replace the incoming URL', async () => {
+	const {drift} = await incoming();
+	const incomingUrl = window.location.href;
+	expect(await drift.copyShareLink()).toBe(incomingUrl);
+	expect(await drift.shareUrl()).toBe(incomingUrl);
+	expect(window.location.href).toBe(incomingUrl);
+});
 it('rejecting backup while previewing must keep persistence paused', async () => {
 	const {pane, values, drift} = await incoming();
 	const previous = localStorage.getItem(`driftpane:${ns}:state`);
@@ -75,14 +82,17 @@ it('rejecting backup while previewing must keep persistence paused', async () =>
 	await vi.advanceTimersByTimeAsync(40);
 	expect(localStorage.getItem(`driftpane:${ns}:state`)).toBe(previous);
 });
-it('changing preset while previewing must not make discard mismatch identity', async () => {
+it('rejects preset changes while previewing so discard keeps the local identity', async () => {
 	const {pane, values, drift} = await incoming();
+	const id = drift.presets.activeId();
 	values.speed = 5;
 	pane.refresh();
-	drift.savePresetAs('Five');
-	const id = drift.presets.activeId();
+	expect(() => drift.savePresetAs('Five')).toThrow();
+	expect(() => drift.presets.save('Five')).toThrow();
+	expect(drift.presets.activeId()).toBe(id);
 	(pane.element.querySelector('.dp-share-btn-ghost') as HTMLElement).click();
-	expect(drift.presets.activeId()).not.toBe(id);
+	expect(drift.presets.activeId()).toBe(id);
+	expect(values.speed).toBe(1);
 });
 it.each(['hidden', 'disabled'] as const)(
 	'a %s sender must keep the recipient confirmation usable',

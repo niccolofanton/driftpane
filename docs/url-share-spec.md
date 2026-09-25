@@ -92,13 +92,18 @@ and copies the resulting URL. `shareUrl()` builds a URL without changing the
 address bar. Without an active identity, these paths return the current URL
 without adding a payload.
 
+While an incoming preview is pending, both methods return the incoming URL;
+they do not publish preview values under the recipient's local preset identity.
+
 ## 6. Receiver flow
 
 1. Restore local persistence and refresh the pane before attaching URL sync.
 2. If an incoming parameter exists, suspend URL sync and decode asynchronously.
    If the Driftpane instance is disposed during decode, stop without applying it.
-3. Ignore invalid input, resuming sync. If the incoming normalized state already
-   equals the local state, skip the prompt and resume sync.
+3. Ignore invalid input, resuming sync. If the incoming normalized state and
+   active preset identity already match the local ones, skip the prompt and
+   resume sync. For a matching custom UUID, restamp a stale URL name from the
+   local preset.
 4. Resolve the identity: a matching **custom** UUID offers Overwrite; an unknown
    UUID or default marker offers Import. A default baseline is never overwritten.
 5. Pause persistence, capture the full `preApply` snapshot, and apply the preview:

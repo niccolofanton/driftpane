@@ -103,6 +103,20 @@ describe('ThemeController', () => {
 		expect(storage.readJSON<DriftpaneTheme | null>('theme', null)).toBe('dark');
 	});
 
+	it('a throwing subscriber cannot interrupt a completed theme change', () => {
+		installMatchMedia(new FakeMediaQueryList(false));
+		const ctrl = new ThemeController({target, storage, initial: 'auto'});
+		const later = vi.fn();
+		ctrl.subscribe(() => {
+			throw new Error('Consumer callback failed');
+		});
+		ctrl.subscribe(later);
+		expect(() => ctrl.set('light')).not.toThrow();
+		expect(target.getAttribute('data-theme')).toBe('light');
+		expect(storage.readJSON('theme', null)).toBe('light');
+		expect(later).toHaveBeenCalledOnce();
+	});
+
 	it('"auto" resolves from matchMedia (dark when system prefers dark)', () => {
 		installMatchMedia(new FakeMediaQueryList(true));
 		const ctrl = new ThemeController({target, storage, initial: 'auto'});
@@ -158,6 +172,17 @@ describe('ThemeController', () => {
 		// After dispose, a system change no longer touches the target.
 		mql.setMatches(false);
 		expect(target.getAttribute('data-theme')).toBe('dark');
+	});
+
+	it('cannot reattach system listeners after disposal', () => {
+		const mql = new FakeMediaQueryList(false);
+		installMatchMedia(mql);
+		const ctrl = new ThemeController({target, storage, initial: 'light'});
+		ctrl.dispose();
+		ctrl.set('auto');
+		expect(mql.listenerCount()).toBe(0);
+		expect(storage.readJSON('theme', null)).toBe(null);
+		expect(target.getAttribute('data-theme')).toBe('light');
 	});
 
 	it('falls back to addListener/removeListener (old Safari API)', () => {

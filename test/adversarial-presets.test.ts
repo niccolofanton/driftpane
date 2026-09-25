@@ -33,17 +33,25 @@ afterEach(() => {
 
 describe('adversarial preset and backup review', () => {
 	it('failed preset application must not partially change earlier bindings', () => {
-		const {drift, params} = session('partial');
+		const {pane, drift, params} = session('partial');
 		const baseline = drift.presets.activeId();
 		const state = drift.presets.currentSnapshot() as any;
 		state.children[0].binding.value = 99;
 		const {ids} = drift.presets.importJSON(
 			JSON.stringify({name: 'Broken', state}),
 		);
-		// The public get() API exposes preset objects; even damaged in-memory
-		// data must not leave a partially applied configuration.
-		(drift.presets.get(ids[0]) as any).state.children[1].disabled =
-			'invalid boolean';
+		// Simulate an importer that changes a prefix before reporting failure.
+		const realImport = pane.importState.bind(pane);
+		let failed = false;
+		vi.spyOn(pane, 'importState').mockImplementation((snapshot) => {
+			if (!failed) {
+				failed = true;
+				params.a = 99;
+				pane.refresh();
+				return false;
+			}
+			return realImport(snapshot);
+		});
 		expect(drift.presets.apply(ids[0])).toBe(false);
 		expect(drift.presets.activeId()).toBe(baseline);
 		expect(params).toEqual({a: 1, b: 2});

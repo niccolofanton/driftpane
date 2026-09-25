@@ -144,6 +144,27 @@ describe('Driftpane facade', () => {
 		expect(document.querySelector('input[type="file"]')).toBeNull();
 	});
 
+	it('dispose restores the pane to its original DOM position', () => {
+		const sibling = document.createElement('div');
+		document.body.append(sibling);
+		const drift = createDriftpane(pane);
+		expect(pane.element.parentElement?.className).toBe(
+			'driftpane-drag-container',
+		);
+		drift.dispose();
+		expect(pane.element.parentElement).toBe(document.body);
+		expect(pane.element.nextSibling).toBe(sibling);
+		expect(document.querySelector('.driftpane-drag-container')).toBeNull();
+	});
+
+	it('cannot reactivate dragging through a retained controller after disposal', () => {
+		const drift = createDriftpane(pane);
+		drift.dispose();
+		drift.draggable.enable();
+		expect(document.querySelector('.driftpane-drag-container')).toBeNull();
+		expect(pane.element.parentElement).toBe(document.body);
+	});
+
 	it('applyPreset applies a saved preset and refreshes', () => {
 		const drift = createDriftpane(pane);
 		const p = drift.presets.save('P');

@@ -212,6 +212,22 @@ describe('PresetController', () => {
 			expect(presets.list().map((p) => p.name)).toEqual(['Alpha', 'Beta']);
 		});
 
+		it('rejects a malformed collection without importing its valid prefix', () => {
+			const before = presets.list();
+			expect(() =>
+				presets.importJSON(
+					JSON.stringify({
+						presets: [
+							{id: 'good', name: 'Good', state: {children: []}},
+							{name: 2, state: null},
+						],
+					}),
+				),
+			).toThrow();
+			expect(presets.list()).toEqual(before);
+			expect(storage.readJSON('presets', null)).toBeNull();
+		});
+
 		it('imports a bare single preset { name, state }', () => {
 			const res = presets.importJSON(
 				JSON.stringify({name: 'Bare', state: {children: []}}),
@@ -279,6 +295,29 @@ describe('PresetController', () => {
 			expect(c.list()).toHaveLength(1);
 			expect(c.list()[0].name).toBe('Good');
 		});
+	});
+
+	it('does not expose mutable preset records through public reads or writes', () => {
+		presets.ensureDefault();
+		const defaultId = presets.activeId() as string;
+		const listed = presets.list()[0];
+		listed.custom = true;
+		listed.name = 'Changed outside controller';
+		(
+			listed.state.children as Array<{binding: {value: number}}>
+		)[0].binding.value = 9;
+		const direct = presets.get(defaultId);
+		if (!direct) throw new Error('Missing Default');
+		direct.custom = true;
+		direct.name = 'Also changed outside controller';
+		expect(presets.get(defaultId)?.custom).toBe(false);
+		expect(presets.get(defaultId)?.name).toBe('Default');
+		expect(presets.get(defaultId)?.state.children?.[0]).toMatchObject({
+			binding: {value: 0.5},
+		});
+		const saved = presets.save('Custom');
+		saved.name = 'Mutated return value';
+		expect(presets.get(saved.id)?.name).toBe('Custom');
 	});
 
 	describe('ensureDefault / Default preset', () => {

@@ -30,6 +30,8 @@ export declare class DraggableController {
     private readonly resizableWidth;
     private readonly resizableHeight;
     private container;
+    private originalMarker;
+    private originallyDetached;
     private handle;
     private resizeHandle;
     private resizeHandleY;
@@ -58,6 +60,7 @@ export declare class DraggableController {
     private startCornerWidth;
     private startCornerHeight;
     private enabled;
+    private disposed;
     private dragging;
     private moved;
     private activePointerId;
@@ -97,7 +100,7 @@ export declare class DraggableController {
     getPosition(): DriftpanePosition;
     /** Returns the panel to the default position. */
     resetPosition(): void;
-    /** Tears everything down: removes the listeners (the container stays in the DOM). */
+    /** Tears everything down and restores the pane's original DOM placement. */
     dispose(): void;
     private handlePointerDown;
     private handlePointerMove;

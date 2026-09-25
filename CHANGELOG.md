@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.1 (2026-09-26)
+
+- Fixed preset creation and renaming in the menu, including selection and
+  duplicate-name handling.
+- Kept shared URL previews, preset selection, saves and imports consistent when
+  URL parameters change or asynchronous operations overlap.
+- Hardened preset restoration, backup validation, disposal and UI lifecycle;
+  added regression tests for the reported flows.
+
 ## 1.4.0 (2026-09-20)
 
 - Added sidepanel presentation: left/right, hover/push, runtime open/close and

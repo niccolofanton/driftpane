@@ -23,6 +23,9 @@ const EXPORT_FORMAT = 'driftpane-presets';
 function isRecord(value) {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
+function isUsablePresetId(value) {
+    return (typeof value === 'string' && value.trim() !== '' && value !== '__none__');
+}
 /** Validate only common state fields, leaving plugin-specific data untouched. */
 function isState(value) {
     if (!isRecord(value))
@@ -63,9 +66,19 @@ function generateId() {
     return `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 export class PresetController {
+    /** Prevent ordinary preset mutations until an incoming share is resolved. */
+    setSharePreviewActive(active) {
+        this.sharePreviewActive = active;
+    }
+    assertEditable() {
+        if (this.sharePreviewActive) {
+            throw new Error('Accept or discard the shared preview first');
+        }
+    }
     constructor(pane, storage, opts) {
         this.listeners = new Set();
         this.factoryCaptured = false;
+        this.sharePreviewActive = false;
         this.pane = pane;
         this.storage = storage;
         this.managerChildIndex = opts.managerChildIndex;
@@ -84,6 +97,7 @@ export class PresetController {
     }
     /** Replace a backup collection while retaining this app's current factory baseline. */
     replaceStore(value) {
+        this.assertEditable();
         if (!isRecord(value) ||
             !hasSupportedVersion(value) ||
             !Array.isArray(value['presets'])) {
@@ -126,9 +140,9 @@ export class PresetController {
         this.persist();
     }
     // --- Reading ------------------------------------------------------------
-    /** List of presets (defensive copy of the array). */
+    /** List of presets, detached from the mutable store. */
     list() {
-        return this.store.presets.slice();
+        return this.store.presets.map((preset) => this.copyPreset(preset));
     }
     /** Id of the active preset (or null). */
     activeId() {
@@ -136,11 +150,19 @@ export class PresetController {
     }
     /** Returns a preset by id, or undefined. */
     get(id) {
-        return this.store.presets.find((p) => p.id === id);
+        const preset = this.findPreset(id);
+        return preset ? this.copyPreset(preset) : undefined;
+    }
+    findPreset(id) {
+        return this.store.presets.find((preset) => preset.id === id);
+    }
+    copyPreset(preset) {
+        return JSON.parse(JSON.stringify(preset));
     }
     // --- Writing / CRUD -----------------------------------------------------
     /** Creates a new CUSTOM preset from the current scoped snapshot. */
     save(name) {
+        this.assertEditable();
         const now = Date.now();
         const preset = {
             id: generateId(),
@@ -153,7 +175,7 @@ export class PresetController {
         this.store.presets.push(preset);
         this.store.activeId = preset.id;
         this.persist();
-        return preset;
+        return this.copyPreset(preset);
     }
     /**
      * Default name proposed for "save as new preset": the active preset name
@@ -161,14 +183,14 @@ export class PresetController {
      */
     suggestedNewName() {
         const active = this.store.activeId
-            ? this.get(this.store.activeId)
+            ? this.findPreset(this.store.activeId)
             : undefined;
         return active ? `${active.name} (copy)` : 'Preset';
     }
     /** Name of the active preset (or null). */
     activeName() {
         const active = this.store.activeId
-            ? this.get(this.store.activeId)
+            ? this.findPreset(this.store.activeId)
             : undefined;
         return active?.name ?? null;
     }
@@ -187,7 +209,7 @@ export class PresetController {
      */
     isModified() {
         const id = this.store.activeId;
-        const active = id ? this.get(id) : undefined;
+        const active = id ? this.findPreset(id) : undefined;
         if (!active) {
             return false;
         }
@@ -210,7 +232,7 @@ export class PresetController {
     /** true if the active preset exists and is CUSTOM (hence deletable). */
     isActiveDeletable() {
         const id = this.store.activeId;
-        const active = id ? this.get(id) : undefined;
+        const active = id ? this.findPreset(id) : undefined;
         return !!active && active.custom !== false;
     }
     /**
@@ -234,6 +256,7 @@ export class PresetController {
      * @returns true if the default was created.
      */
     ensureDefault(name = 'Default') {
+        this.assertEditable();
         if (this.factoryCaptured)
             return false;
         this.factoryCaptured = true;
@@ -268,7 +291,8 @@ export class PresetController {
     }
     /** Overwrites an existing preset's state with the current snapshot. */
     overwrite(id) {
-        const preset = this.get(id);
+        this.assertEditable();
+        const preset = this.findPreset(id);
         if (!preset) {
             throw new Error(`Preset not found: ${id}`);
         }
@@ -279,14 +303,15 @@ export class PresetController {
         preset.updatedAt = Date.now();
         this.store.activeId = preset.id;
         this.persist();
-        return preset;
+        return this.copyPreset(preset);
     }
     /**
      * Applies a preset to the pane via importState.
      * @returns true if the application succeeded.
      */
     apply(id) {
-        const preset = this.get(id);
+        this.assertEditable();
+        const preset = this.findPreset(id);
         if (!preset) {
             return false;
         }
@@ -316,6 +341,7 @@ export class PresetController {
     }
     /** Removes a preset. */
     remove(id) {
+        this.assertEditable();
         const idx = this.store.presets.findIndex((p) => p.id === id);
         if (idx < 0 || this.store.presets[idx].custom === false) {
             return;
@@ -328,8 +354,9 @@ export class PresetController {
     }
     /** Renames a preset. */
     rename(id, name) {
-        const preset = this.get(id);
-        if (!preset) {
+        this.assertEditable();
+        const preset = this.findPreset(id);
+        if (!preset || preset.custom === false) {
             return;
         }
         preset.name = name.trim() || preset.name;
@@ -348,7 +375,7 @@ export class PresetController {
      */
     activeIdentity() {
         const id = this.store.activeId;
-        const active = id ? this.get(id) : undefined;
+        const active = id ? this.findPreset(id) : undefined;
         if (!active) {
             return null;
         }
@@ -362,8 +389,8 @@ export class PresetController {
      * an existing custom preset (same UUID), or import as new.
      */
     resolveSharedAction(env) {
-        if (!env.d && typeof env.id === 'string') {
-            const existing = this.get(env.id);
+        if (!env.d && isUsablePresetId(env.id)) {
+            const existing = this.findPreset(env.id);
             if (existing && existing.custom !== false) {
                 return { action: 'overwrite', existingName: existing.name };
             }
@@ -375,9 +402,12 @@ export class PresetController {
      * capturing the current (previewed) live state. No-op if the id is unknown.
      */
     acceptSharedOverwrite(id) {
-        const preset = this.get(id);
+        const preset = this.findPreset(id);
         if (preset && preset.custom !== false) {
-            this.overwrite(id);
+            preset.state = this.snapshot();
+            preset.updatedAt = Date.now();
+            this.store.activeId = preset.id;
+            this.persist();
         }
     }
     /**
@@ -390,8 +420,8 @@ export class PresetController {
     acceptSharedImport(env) {
         const state = this.snapshot();
         const now = Date.now();
-        if (!env.d && typeof env.id === 'string') {
-            const id = this.get(env.id) ? generateId() : env.id;
+        if (!env.d && isUsablePresetId(env.id)) {
+            const id = this.findPreset(env.id) ? generateId() : env.id;
             const preset = {
                 id,
                 name: env.n || 'Imported',
@@ -403,7 +433,7 @@ export class PresetController {
             this.store.presets.push(preset);
             this.store.activeId = preset.id;
             this.persist();
-            return preset;
+            return this.copyPreset(preset);
         }
         // Name-marker import: idempotent by content.
         const serialized = JSON.stringify(state);
@@ -411,7 +441,7 @@ export class PresetController {
         if (equivalent) {
             this.store.activeId = equivalent.id;
             this.persist();
-            return equivalent;
+            return this.copyPreset(equivalent);
         }
         const preset = {
             id: generateId(),
@@ -424,7 +454,7 @@ export class PresetController {
         this.store.presets.push(preset);
         this.store.activeId = preset.id;
         this.persist();
-        return preset;
+        return this.copyPreset(preset);
     }
     /** Unique `"<base> (imported)"` name, numbering on collision. */
     uniqueImportedName(base) {
@@ -453,7 +483,7 @@ export class PresetController {
     }
     /** Serializes a single preset (programmatic API, not wired into the UI). */
     exportPresetJSON(id) {
-        const preset = this.get(id);
+        const preset = this.findPreset(id);
         if (!preset) {
             throw new Error(`Preset not found: ${id}`);
         }
@@ -468,6 +498,7 @@ export class PresetController {
      * @returns number of imported presets.
      */
     importJSON(raw) {
+        this.assertEditable();
         let parsed;
         try {
             parsed = JSON.parse(raw);
@@ -489,11 +520,12 @@ export class PresetController {
         if (Array.isArray(obj['presets'])) {
             // Collection envelope.
             const incoming = obj['presets'];
-            for (const item of incoming) {
-                const preset = this.coercePreset(item);
-                if (preset) {
-                    ids.push(this.addImportedPreset(preset));
-                }
+            const parsedPresets = incoming.map((item) => this.coercePreset(item));
+            if (parsedPresets.some((preset) => preset === null)) {
+                throw new Error('Invalid preset collection');
+            }
+            for (const preset of parsedPresets) {
+                ids.push(this.addImportedPreset(preset));
             }
         }
         else if (this.isPresetShape(obj)) {
@@ -616,11 +648,7 @@ export class PresetController {
         }
         const now = Date.now();
         return {
-            id: typeof o['id'] === 'string' &&
-                o['id'].trim() !== '' &&
-                o['id'] !== '__none__'
-                ? o['id']
-                : generateId(),
+            id: isUsablePresetId(o['id']) ? o['id'] : generateId(),
             name: o['name'],
             createdAt: typeof o['createdAt'] === 'number' ? o['createdAt'] : now,
             updatedAt: typeof o['updatedAt'] === 'number' ? o['updatedAt'] : now,

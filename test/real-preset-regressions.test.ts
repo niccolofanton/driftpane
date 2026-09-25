@@ -158,6 +158,95 @@ describe('real Tweakpane: preset regressions', () => {
 		expect(applied).not.toHaveBeenCalled();
 	});
 
+	it('creates and renames through the real menu when native prompts are unavailable', () => {
+		vi.spyOn(window, 'prompt').mockImplementation(() => {
+			throw new Error('Browser prompt blocked');
+		});
+		const {drift, selector, click} = session();
+		const submit = (name: string) => {
+			const editor = document.querySelector('.dp-name-editor') as HTMLElement;
+			expect(editor).not.toBeNull();
+			(editor.querySelector('input') as HTMLInputElement).value = name;
+			(editor.querySelector('button') as HTMLButtonElement).click();
+		};
+		click('Save as new');
+		submit('First');
+		const id = drift.presets.activeId();
+		expect(drift.presets.activeName()).toBe('First');
+		expect(selector.value).toBe(id);
+		click('Rename preset');
+		submit('Second');
+		expect(drift.presets.activeName()).toBe('Second');
+		expect(selector.options).toContainEqual({text: '• Second', value: id});
+		expect(
+			JSON.parse(
+				localStorage.getItem('driftpane:real-preset-regressions:presets') ??
+					'{}',
+			).presets,
+		).toEqual(
+			expect.arrayContaining([expect.objectContaining({id, name: 'Second'})]),
+		);
+	});
+
+	it('does not submit an enclosing application form from pane buttons or the name editor', () => {
+		const host = document.createElement('form');
+		document.body.append(host);
+		const submits: Event[] = [];
+		host.addEventListener('submit', (event) => {
+			submits.push(event);
+			event.preventDefault();
+		});
+		const pane = new Pane({container: host, title: 'Form Pane'});
+		pane.addBinding({speed: 1}, 'speed');
+		const drift = createDriftpane(pane, {
+			storageNamespace: 'form-host',
+			urlSync: false,
+			draggable: false,
+		});
+		sessions.push({pane, drift});
+		const menuButton = Array.from(
+			pane.element.querySelectorAll<HTMLButtonElement>('button'),
+		).find((button) => button.textContent?.includes('Save as new'));
+		expect(menuButton).toBeDefined();
+		menuButton?.click();
+		expect(submits).toHaveLength(0);
+		const editor = pane.element.querySelector('.dp-name-editor') as HTMLElement;
+		expect(editor).not.toBeNull();
+		(editor.querySelector('input') as HTMLInputElement).value = 'Inside form';
+		(editor.querySelector('button') as HTMLButtonElement).click();
+		expect(drift.presets.activeName()).toBe('Inside form');
+		expect(submits).toHaveLength(0);
+		const expanded = pane.exportState()['expanded'];
+		(pane.element.querySelector('.tp-rotv_b') as HTMLButtonElement).click();
+		expect(pane.exportState()['expanded']).toBe(!expanded);
+		expect(submits).toHaveLength(0);
+	});
+
+	it('keeps the factory preset protected from renaming', () => {
+		const {drift, folder} = session();
+		const id = drift.presets.activeId();
+		if (!id) throw new Error('Missing default');
+		const rename = folder.children.find(
+			(child: {title?: string}) => child.title === 'Rename preset',
+		);
+		expect(rename.disabled).toBe(true);
+		drift.presets.rename(id, 'Changed');
+		expect(drift.presets.activeName()).toBe('Default');
+	});
+
+	it('closes a pending rename when the selected preset changes', () => {
+		const {drift, pane, selector, click} = session();
+		const first = drift.presets.save('First');
+		const second = drift.presets.save('Second');
+		selector.value = first.id;
+		click('Rename preset');
+		expect(pane.element.querySelector('.dp-name-editor')).not.toBeNull();
+		selector.value = second.id;
+		expect(pane.element.querySelector('.dp-name-editor')).toBeNull();
+		expect(drift.presets.activeId()).toBe(second.id);
+		expect(drift.presets.get(first.id)?.name).toBe('First');
+	});
+
 	it('scopes the actual manager after controls are appended after initialization', () => {
 		const {pane, params, drift, folder} = session();
 		pane.addBinding(params, 'extra');

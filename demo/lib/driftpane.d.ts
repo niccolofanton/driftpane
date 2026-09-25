@@ -41,7 +41,9 @@ export declare class Driftpane {
     private readonly onStateApplied?;
     private disposed;
     private sharePreviewActive;
+    private sharePreviewOriginalState;
     private unsubscribePresets?;
+    private readonly preventHostFormSubmit;
     constructor(pane: PaneLike, opts?: DriftpaneOptions);
     /**
      * Sets the maximum height of the panel at runtime, and persists it. Beyond
@@ -83,6 +85,8 @@ export declare class Driftpane {
      * import/overwrite or discard. Async because decoding is async.
      */
     private handleIncomingShare;
+    /** Restores local values and unlocks presets when an incoming preview is discarded. */
+    private discardSharePreview;
     /** Common tail of accepting a shared preset: persist + resume + restamp URL. */
     private finishShareAccept;
     /**

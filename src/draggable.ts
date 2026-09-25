@@ -76,6 +76,8 @@ export class DraggableController {
 	private readonly resizableHeight: boolean;
 
 	private container: HTMLElement | null = null;
+	private originalMarker: Comment | null = null;
+	private originallyDetached = false;
 	private handle: HTMLElement | null = null;
 	private resizeHandle: HTMLElement | null = null;
 	private resizeHandleY: HTMLElement | null = null;
@@ -111,6 +113,7 @@ export class DraggableController {
 	private startCornerHeight = 0;
 
 	private enabled = false;
+	private disposed = false;
 	private dragging = false;
 	private moved = false;
 	private activePointerId: number | null = null;
@@ -190,7 +193,7 @@ export class DraggableController {
 	 * up the event listeners. Idempotent.
 	 */
 	public enable(): void {
-		if (this.enabled) {
+		if (this.enabled || this.disposed) {
 			return;
 		}
 		const paneElem = this.pane.element;
@@ -207,8 +210,11 @@ export class DraggableController {
 			container.style.margin = '0';
 			const parent = paneElem.parentElement;
 			if (parent) {
+				this.originalMarker = doc.createComment('driftpane-original-position');
+				parent.insertBefore(this.originalMarker, paneElem);
 				parent.insertBefore(container, paneElem);
 			} else {
+				this.originallyDetached = true;
 				doc.body.appendChild(container);
 			}
 			container.appendChild(paneElem);
@@ -334,7 +340,7 @@ export class DraggableController {
 
 	/** Sets a new position (clamped) and persists it. */
 	public setPosition(p: DriftpanePosition): void {
-		if (!isPosition(p)) return;
+		if (this.disposed || !isPosition(p)) return;
 		this.position = {x: p.x, y: p.y};
 		this.applyPosition();
 		this.savePosition();
@@ -342,7 +348,7 @@ export class DraggableController {
 
 	/** Sets and persists the preferred width, adapting its rendered size to the viewport. */
 	public setWidth(width: number): void {
-		if (!Number.isFinite(width)) return;
+		if (this.disposed || !Number.isFinite(width)) return;
 		this.width = this.clampWidth(width);
 		this.applyWidth();
 		this.reclampPosition();
@@ -364,9 +370,29 @@ export class DraggableController {
 		this.setPosition(this.defaultPosition);
 	}
 
-	/** Tears everything down: removes the listeners (the container stays in the DOM). */
+	/** Tears everything down and restores the pane's original DOM placement. */
 	public dispose(): void {
+		if (this.disposed) return;
+		this.disposed = true;
 		this.disable();
+		const container = this.container;
+		if (!container) return;
+		const pane = this.pane.element;
+		if (container.contains(pane)) {
+			if (this.originalMarker?.parentNode) {
+				this.originalMarker.replaceWith(pane);
+			} else if (this.originallyDetached) {
+				pane.remove();
+			} else {
+				container.before(pane);
+			}
+		}
+		this.originalMarker?.remove();
+		this.originalMarker = null;
+		this.originallyDetached = false;
+		container.remove();
+		this.container = null;
+		this.handle = null;
 	}
 
 	// --- Gesture handling ---------------------------------------------------

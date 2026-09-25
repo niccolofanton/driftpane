@@ -245,10 +245,7 @@ export interface DriftpaneOptions {
  *                      was put back.
  */
 export type DriftpaneApplyReason =
-	| 'restore'
-	| 'preset'
-	| 'share'
-	| 'share-discard';
+	'restore' | 'preset' | 'share' | 'share-discard';
 
 // We re-export the theme type so it is reachable from the public barrel together
 // with the other options, without consumers having to know theme-controller.

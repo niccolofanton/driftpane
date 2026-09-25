@@ -34,7 +34,7 @@ that adds eight features without modifying the core:
    export / import named snapshots of the state, in a dedicated folder
    appended after the existing controls at initialization. With the menu enabled,
    **"Default"** captures the current session's factory baseline before persisted
-   values are restored; user actions cannot delete or overwrite it.
+   values are restored; user actions cannot delete, overwrite or rename it.
    **Restore** re-applies the active preset, which may be Default or a custom preset.
 5. **Skin theme** (requires `import '@niccolofanton/driftpane/theme.css'`) — `light` / `dark` /
    `auto`: `auto` (default) follows the system's `prefers-color-scheme` in real

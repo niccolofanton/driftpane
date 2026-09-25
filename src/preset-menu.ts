@@ -116,10 +116,12 @@ export class PresetMenu {
 	// Buttons whose disabled state depends on the active preset.
 	private saveChangesBtn: ButtonLike | null = null;
 	private revertBtn: ButtonLike | null = null;
+	private renameBtn: ButtonLike | null = null;
 	private deleteBtn: ButtonLike | null = null;
 
 	// Incoming-share prompt (temporary): the custom card element.
 	private sharePromptCard: HTMLElement | null = null;
+	private nameEditor: HTMLElement | null = null;
 
 	constructor(
 		pane: PaneLike,
@@ -193,6 +195,10 @@ export class PresetMenu {
 			if (this.syncingList) {
 				return;
 			}
+			if (this.sharePromptCard) {
+				this.refreshList();
+				return;
+			}
 			const id = ev.value;
 			if (typeof id === 'string' && id !== NONE_VALUE) {
 				const ok = this.presets.apply(id);
@@ -215,6 +221,7 @@ export class PresetMenu {
 		const renameBtn = folder.addButton({title: 'Rename preset'});
 		renameBtn.on('click', () => this.onRename());
 		this.markButton(renameBtn, 'dp-btn-rename');
+		this.renameBtn = renameBtn;
 
 		this.groupIntoRow(revertBtn, renameBtn);
 
@@ -300,6 +307,8 @@ export class PresetMenu {
 	 * Also updates the selected value to the current activeId.
 	 */
 	public refreshList(): void {
+		// Selection or collection changes invalidate any pending name edit.
+		this.clearNameEditor();
 		if (!this.listBlade) {
 			return;
 		}
@@ -333,6 +342,9 @@ export class PresetMenu {
 		if (this.revertBtn) {
 			this.revertBtn.disabled = !hasActive;
 		}
+		if (this.renameBtn) {
+			this.renameBtn.disabled = !activeIsCustom;
+		}
 		if (this.deleteBtn) {
 			this.deleteBtn.disabled = !activeIsCustom;
 		}
@@ -352,6 +364,7 @@ export class PresetMenu {
 			action: 'import' | 'overwrite';
 			existingName?: string;
 			merged: boolean;
+			reuseByContent: boolean;
 		},
 		callbacks: {
 			onImport: () => void;
@@ -364,6 +377,7 @@ export class PresetMenu {
 			return;
 		}
 		this.clearSharePrompt();
+		this.clearNameEditor();
 		// Auto-expand (duck-typed FolderApi.expanded) so the card cannot be missed.
 		(folder as unknown as {expanded?: boolean}).expanded = true;
 
@@ -453,11 +467,14 @@ export class PresetMenu {
 		action: 'import' | 'overwrite';
 		existingName?: string;
 		merged: boolean;
+		reuseByContent: boolean;
 	}): string {
 		const base =
 			info.action === 'overwrite'
 				? `Overwrites your "${info.existingName ?? info.name}" with the shared values.`
-				: 'Import this as a new preset?';
+				: info.reuseByContent
+					? 'Keep these shared values? An identical local preset will be reused.'
+					: 'Import this as a new preset?';
 		return info.merged
 			? `${base} Structure differs — values merged by key.`
 			: base;
@@ -471,6 +488,76 @@ export class PresetMenu {
 		this.sharePromptCard = null;
 	}
 
+	/** Dismisses a preview that was cancelled through the public URL API. */
+	public dismissSharePrompt(): void {
+		this.clearSharePrompt();
+		this.refreshList();
+	}
+
+	/** Edit a preset name inside the pane, including browsers that block native prompts. */
+	private editName(
+		label: string,
+		initialValue: string,
+		onSave: (name: string) => void,
+	): void {
+		if (this.sharePromptCard) return;
+		this.clearNameEditor();
+		(this.folder as unknown as {expanded?: boolean}).expanded = true;
+		const host = this.sharePromptHost();
+		if (!host) return;
+		const doc = host.ownerDocument;
+		const editor = doc.createElement('div');
+		editor.className = 'dp-name-editor';
+		editor.setAttribute('role', 'group');
+		const title = doc.createElement('label');
+		title.textContent = label;
+		const input = doc.createElement('input');
+		input.type = 'text';
+		input.value = initialValue;
+		input.required = true;
+		input.maxLength = 100;
+		title.appendChild(input);
+		const actions = doc.createElement('div');
+		actions.className = 'dp-name-editor-actions';
+		const save = doc.createElement('button');
+		save.type = 'button';
+		save.textContent = 'Save';
+		const cancel = doc.createElement('button');
+		cancel.type = 'button';
+		cancel.textContent = 'Cancel';
+		cancel.addEventListener('click', () => this.clearNameEditor());
+		actions.append(save, cancel);
+		editor.append(title, actions);
+		const commit = (): void => {
+			const name = input.value.trim();
+			if (!name) {
+				input.focus();
+				return;
+			}
+			this.clearNameEditor();
+			onSave(name);
+		};
+		save.addEventListener('click', commit);
+		editor.addEventListener('keydown', (event) => {
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				this.clearNameEditor();
+			} else if (event.key === 'Enter' && event.target === input) {
+				event.preventDefault();
+				commit();
+			}
+		});
+		host.insertBefore(editor, host.firstChild);
+		this.nameEditor = editor;
+		input.focus();
+		input.select();
+	}
+
+	private clearNameEditor(): void {
+		this.nameEditor?.remove();
+		this.nameEditor = null;
+	}
+
 	/** Unmounts the menu and removes the hidden file input. */
 	public dispose(): void {
 		this.disposed = true;
@@ -480,6 +567,7 @@ export class PresetMenu {
 		this.unsubscribeTheme?.();
 		this.unsubscribeTheme = null;
 		this.clearSharePrompt();
+		this.clearNameEditor();
 		if (this.fileInput && this.fileInput.parentNode) {
 			this.fileInput.parentNode.removeChild(this.fileInput);
 		}
@@ -489,6 +577,7 @@ export class PresetMenu {
 		this.listBlade = null;
 		this.saveChangesBtn = null;
 		this.revertBtn = null;
+		this.renameBtn = null;
 		this.deleteBtn = null;
 	}
 
@@ -532,6 +621,7 @@ export class PresetMenu {
 	 * are changes it asks for confirmation; with no changes it is a silent no-op.
 	 */
 	private onRevert(): void {
+		if (this.sharePromptCard) return;
 		if (this.presets.activeId() === null) {
 			return;
 		}
@@ -549,6 +639,7 @@ export class PresetMenu {
 
 	/** "Save changes": overwrites the active (custom) preset, after confirmation. */
 	private onSaveChanges(): void {
+		if (this.sharePromptCard) return;
 		// Disabled without an active preset or on the Default (non-overwritable baseline).
 		if (!this.presets.isActiveDeletable()) {
 			return;
@@ -571,19 +662,19 @@ export class PresetMenu {
 	 * with the " (copy)" suffix.
 	 */
 	private onSaveNew(): void {
-		const name = this.promptName(
-			'New preset name:',
+		this.editName(
+			'New preset name',
 			this.presets.suggestedNewName(),
+			(name) => {
+				this.presets.save(name);
+				this.refreshList();
+			},
 		);
-		if (name === null) {
-			return;
-		}
-		this.presets.save(name);
-		this.refreshList();
 	}
 
 	/** "Delete preset": deletes the active preset if custom, after confirmation. */
 	private onDelete(): void {
+		if (this.sharePromptCard) return;
 		if (!this.presets.isActiveDeletable()) {
 			return;
 		}
@@ -605,18 +696,17 @@ export class PresetMenu {
 	private onRename(): void {
 		const activeId = this.presets.activeId();
 		const current = activeId ? this.presets.get(activeId) : undefined;
-		if (!activeId || !current) {
+		if (!activeId || !current || current.custom === false) {
 			this.notify('No preset selected to rename.');
 			return;
 		}
-		const name = this.promptName('New name for the preset:', current.name);
-		if (name === null) {
-			return;
-		}
-		this.presets.rename(activeId, name);
-		// `current` is the live reference: after rename it already has the new name.
-		this.refreshList();
-		this.notify(`Preset renamed to "${current.name}".`);
+		this.editName('Rename preset', current.name, (name) => {
+			this.presets.rename(activeId, name);
+			this.refreshList();
+			this.notify(
+				`Preset renamed to "${this.presets.get(activeId)?.name ?? name}".`,
+			);
+		});
 	}
 
 	/** "Export": downloads the SELECTED preset as a .json file named after it. */
@@ -657,6 +747,7 @@ export class PresetMenu {
 
 	/** "Import JSON": opens the file picker (with a text-prompt fallback). */
 	private onImport(): void {
+		if (this.sharePromptCard) return;
 		if (this.fileInput) {
 			this.fileInput.value = '';
 			this.fileInput.click();
@@ -758,6 +849,7 @@ export class PresetMenu {
 	}
 
 	private applyImport(raw: string): void {
+		if (this.sharePromptCard) return;
 		try {
 			const parsed: unknown = JSON.parse(raw);
 			if (
@@ -811,14 +903,6 @@ export class PresetMenu {
 		doc.body.removeChild(anchor);
 		// Release the URL on the next tick to give the download time to start.
 		setTimeout(() => URL.revokeObjectURL(url), 0);
-	}
-
-	private promptName(message: string, fallback: string): string | null {
-		if (typeof window !== 'undefined' && window.prompt) {
-			const value = window.prompt(message, fallback);
-			return value;
-		}
-		return fallback;
 	}
 
 	private notify(message: string): void {

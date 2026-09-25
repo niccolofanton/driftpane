@@ -87,8 +87,10 @@ export declare class PresetMenu {
     private managerIndexAtMount;
     private saveChangesBtn;
     private revertBtn;
+    private renameBtn;
     private deleteBtn;
     private sharePromptCard;
+    private nameEditor;
     constructor(pane: PaneLike, presets: PresetController, opts: PresetMenuOptions);
     /**
      * Creates and mounts the preset folder AT THE BOTTOM of the pane (last child).
@@ -119,6 +121,7 @@ export declare class PresetMenu {
         action: 'import' | 'overwrite';
         existingName?: string;
         merged: boolean;
+        reuseByContent: boolean;
     }, callbacks: {
         onImport: () => void;
         onOverwrite: () => void;
@@ -133,6 +136,11 @@ export declare class PresetMenu {
     private sharePromptText;
     /** Removes the share card. */
     private clearSharePrompt;
+    /** Dismisses a preview that was cancelled through the public URL API. */
+    dismissSharePrompt(): void;
+    /** Edit a preset name inside the pane, including browsers that block native prompts. */
+    private editName;
+    private clearNameEditor;
     /** Unmounts the menu and removes the hidden file input. */
     dispose(): void;
     /** Adds the icon classes to the button blade (if accessible). */
@@ -185,6 +193,5 @@ export declare class PresetMenu {
     private importFromPrompt;
     private applyImport;
     private downloadFile;
-    private promptName;
     private notify;
 }

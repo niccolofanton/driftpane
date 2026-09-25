@@ -123,7 +123,7 @@ export class UrlShareController {
      * identity to stamp or no window.
      */
     writeNow() {
-        if (this.disposed) {
+        if (this.disposed || this.suspended) {
             return Promise.resolve(this.currentHref());
         }
         const writing = this.performWrite();
@@ -171,12 +171,18 @@ export class UrlShareController {
      * Returns the current href if there is no identity to stamp.
      */
     async buildUrl() {
+        if (this.disposed || this.suspended) {
+            return this.currentHref();
+        }
         const identity = this.opts.getIdentity();
         if (!identity || !this.hasWindow()) {
             return this.currentHref();
         }
         const env = buildEnvelope(this.opts.getSnapshot(), identity);
         const value = await encodeEnvelope(env);
+        if (this.disposed || this.suspended) {
+            return this.currentHref();
+        }
         return this.urlWithParam(value);
     }
     /** Reads + decodes the incoming param, applying the defensive version rules. */
@@ -222,7 +228,9 @@ export class UrlShareController {
             d: o['d'] === true,
             s: state,
         };
-        if (typeof o['id'] === 'string') {
+        if (typeof o['id'] === 'string' &&
+            o['id'].trim() !== '' &&
+            o['id'] !== '__none__') {
             env.id = o['id'];
         }
         return { kind: 'envelope', env };
@@ -308,7 +316,10 @@ function buildEnvelope(snapshot, identity) {
         d: identity.isDefault,
         s: snapshot,
     };
-    if (!identity.isDefault && typeof identity.id === 'string') {
+    if (!identity.isDefault &&
+        typeof identity.id === 'string' &&
+        identity.id.trim() !== '' &&
+        identity.id !== '__none__') {
         env.id = identity.id;
     }
     return env;

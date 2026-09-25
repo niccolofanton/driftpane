@@ -20,6 +20,10 @@ export declare class PresetController {
     private store;
     private readonly listeners;
     private factoryCaptured;
+    private sharePreviewActive;
+    /** Prevent ordinary preset mutations until an incoming share is resolved. */
+    setSharePreviewActive(active: boolean): void;
+    private assertEditable;
     constructor(pane: PaneLike, storage: DriftpaneStorage, opts: PresetOptions);
     /** Resolves the preset folder index (fixed number or lazy resolver). */
     private resolveManagerIndex;
@@ -27,12 +31,14 @@ export declare class PresetController {
     subscribe(listener: () => void): () => void;
     /** Replace a backup collection while retaining this app's current factory baseline. */
     replaceStore(value: unknown): void;
-    /** List of presets (defensive copy of the array). */
+    /** List of presets, detached from the mutable store. */
     list(): DriftpanePreset[];
     /** Id of the active preset (or null). */
     activeId(): string | null;
     /** Returns a preset by id, or undefined. */
     get(id: string): DriftpanePreset | undefined;
+    private findPreset;
+    private copyPreset;
     /** Creates a new CUSTOM preset from the current scoped snapshot. */
     save(name: string): DriftpanePreset;
     /**

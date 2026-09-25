@@ -137,6 +137,23 @@ describe('share URL regressions', () => {
 		expect(new URL(window.location.href).searchParams.get('host')).toBe('keep');
 	});
 
+	it('does not publish an explicit copy while an incoming preview is suspended', async () => {
+		const original = window.location.href;
+		const controller = new UrlShareController(
+			{on: () => undefined},
+			{
+				paramKey: 'dp:separate-preview',
+				debounceMs: 20,
+				getSnapshot: () => ({children: []}),
+				getIdentity: () => ({name: 'Preview', isDefault: true}),
+			},
+		);
+		cleanup.push(() => controller.dispose());
+		controller.suspend();
+		expect(await controller.writeNow()).toBe(original);
+		expect(window.location.href).toBe(original);
+	});
+
 	it('dispose during incoming decoding prevents state mutation and share callbacks', async () => {
 		const source = new Pane();
 		const values = {speed: 9, size: 8};
