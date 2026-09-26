@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.2 (2026-09-26)
+
+- Fixed CI formatting with the Prettier version pinned in the lockfile.
+
 ## 1.4.1 (2026-09-26)
 
 - Fixed preset creation and renaming in the menu, including selection and

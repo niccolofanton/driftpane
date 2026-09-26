@@ -1,7 +1,7 @@
 {
 	"packageManager": "pnpm@12.5.1",
 	"name": "@niccolofanton/driftpane",
-	"version": "1.4.1",
+	"version": "1.4.2",
 	"description": "Tweakpane v4 with persistent state, floating and hover/push sidepanels, presets, themes, resize, backups and shareable config links.",
 	"type": "module",
 	"sideEffects": [
